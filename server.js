@@ -13,6 +13,7 @@ require('./positionManager'); // Auto-starts manager with setInterval
 const { parseMrdSignal } = require('./utils/mrdParser');
 const { executeTrade } = require('./tradeExecutor'); // adjust path if needed
 const { getCurrentEquity } = require('./utils/getAccountBalance');
+const { batchClosePositions, closeAllPositions, closeRunningTrade } = require('./utils/closeRunningTrade');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
@@ -206,6 +207,24 @@ app.post('/close-symbol', async (req, res) => {
     const result = await closeRunningTrade(symbol, side);
     res.json(result);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === BULK CLOSE POSITIONS API ===
+app.post('/api/bulk-close', async (req, res) => {
+  const { symbols } = req.body; // Expect array of symbols, e.g., ["ACHUSDT", "STRKUSDT"]
+
+  if (!Array.isArray(symbols) || symbols.length === 0) {
+    return res.status(400).json({ error: 'Provide "symbols" as array of strings' });
+  }
+
+  try {
+    console.log(`[API] Bulk close requested for ${symbols.length} symbols: ${symbols.join(', ')}`);
+    const results = await batchClosePositions(symbols);
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error('[API] Bulk close failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
