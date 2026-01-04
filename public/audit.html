@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signal Audit Log</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+      margin: 0; 
+      padding: 20px; 
+      min-height: 100vh;
+    }
+    .container { 
+      max-width: 1400px; 
+      margin: auto; 
+      background: white; 
+      padding: 30px; 
+      border-radius: 16px; 
+      box-shadow: 0 20px 40px rgba(0,0,0,0.15); 
+    }
+    h1 { text-align: center; color: #4a5568; margin-bottom: 30px; }
+    .filter { 
+      display: flex; 
+      gap: 15px; 
+      margin-bottom: 30px; 
+      flex-wrap: wrap; 
+      justify-content: center;
+    }
+    select, input { 
+      padding: 12px; 
+      border-radius: 8px; 
+      border: 1px solid #cbd5e0; 
+      font-size: 1em; 
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin-top: 20px; 
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+      border-radius: 12px; 
+      overflow: hidden; 
+    }
+    th { 
+      background: #4299e1; 
+      color: white; 
+      padding: 18px; 
+      text-align: left; 
+    }
+    td { 
+      padding: 16px 18px; 
+      border-bottom: 1px solid #edf2f7; 
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #f7fafc; }
+    tr:hover td { background: #ebf8ff; cursor: pointer; }
+    .success { background: #d4edda !important; }
+    .skipped { background: #fff3cd !important; }
+    .failed { background: #f8d7da !important; }
+    .received { background: #e6fffa !important; }
+    .details-row {
+      background: #f8f9fa !important;
+    }
+    .details-pre {
+      background: #2d3748;
+      color: #a0aec0;
+      padding: 20px;
+      border-radius: 8px;
+      overflow: auto;
+      margin: 10px 0;
+      white-space: pre-wrap;
+      font-size: 0.9em;
+    }
+    .no-signals {
+      text-align: center;
+      padding: 60px;
+      color: #718096;
+      font-size: 1.4em;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [data, setData] = useState({ signals: [], failures: [] });
+      const [filter, setFilter] = useState('all');
+      const [symbolFilter, setSymbolFilter] = useState('');
+      const [expandedRow, setExpandedRow] = useState(null);
+
+      useEffect(() => {
+        fetch('/audit-data')
+          .then(r => r.json())
+          .then(setData)
+          .catch(() => setData({ signals: [], failures: [] }));
+      }, []);
+
+      const filteredSignals = data.signals.filter(s => {
+        if (filter !== 'all' && s.outcome !== filter) return false;
+        if (symbolFilter && !s.symbol.toLowerCase().includes(symbolFilter.toLowerCase())) return false;
+        return true;
+      });
+
+      const toggleRow = (index) => {
+        setExpandedRow(expandedRow === index ? null : index);
+      };
+
+      return (
+        <div className="container">
+          <h1>📊 Signal Audit Log</h1>
+
+          <div className="filter">
+            <select value={filter} onChange={e => setFilter(e.target.value)}>
+              <option value="all">All Signals</option>
+              <option value="received">Received (Parsed)</option>
+              <option value="success">Executed</option>
+              <option value="skipped">Skipped</option>
+              <option value="failed">Failed</option>
+            </select>
+            <input 
+              placeholder="Filter by symbol..." 
+              value={symbolFilter}
+              onChange={e => setSymbolFilter(e.target.value)}
+            />
+          </div>
+
+          {filteredSignals.length === 0 ? (
+            <div className="no-signals">No signals match current filter</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Symbol</th>
+                  <th>Direction</th>
+                  <th>Entries</th>
+                  <th>SL</th>
+                  <th>Status</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSignals.map((s, i) => {
+                  // Find full detailed entry from failures array (if exists)
+                  const fullDetail = data.failures.find(f => 
+                    f.timestamp === s.timestamp && 
+                    f.outcome === s.outcome &&
+                    (f.signal?.symbol || 'UNKNOWN') === s.symbol
+                  );
+
+                  return (
+                    <React.Fragment key={i}>
+                      <tr 
+                        onClick={() => toggleRow(i)}
+                        className={s.outcome}
+                      >
+                        <td>{new Date(s.timestamp).toLocaleString()}</td>
+                        <td>{s.symbol}</td>
+                        <td>{s.direction}</td>
+                        <td>{s.entries}</td>
+                        <td>{s.sl}</td>
+                        <td><strong>{s.outcome}</strong></td>
+                        <td>{s.reason}</td>
+                      </tr>
+
+                      {expandedRow === i && fullDetail && (
+                        <tr className="details-row">
+                          <td colSpan="7">
+                            <div className="details-pre">
+                              {JSON.stringify(fullDetail, null, 2)}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {expandedRow === i && !fullDetail && (
+                        <tr className="details-row">
+                          <td colSpan="7" style={{textAlign:'center', padding:'30px', color:'#718096'}}>
+                            No detailed log available for this entry
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

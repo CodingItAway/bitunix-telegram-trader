@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bitunix Trading Bot Dashboard</title>
+  <!-- Babel for JSX support -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Socket.io -->
+  <script src="https://unpkg.com/socket.io-client@4/dist/socket.io.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 40px auto;
+      padding: 30px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    }
+    h1 {
+      text-align: center;
+      color: #4a5568;
+      font-size: 2.5em;
+      margin-bottom: 30px;
+    }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-top: 20px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    th {
+      background: #4299e1;
+      color: white;
+      padding: 18px;
+      text-align: left;
+      font-size: 1.1em;
+    }
+    td {
+      padding: 16px 18px;
+      background: #ffffff;
+      border-bottom: 1px solid #edf2f7;
+    }
+    tr:nth-child(even) td {
+      background: #f7fafc;
+    }
+    tr:hover td {
+      background: #ebf8ff;
+    }
+    .no-positions {
+      text-align: center;
+      padding: 80px 20px;
+      font-size: 1.8em;
+      color: #718096;
+      font-weight: bold;
+    }
+    .status {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 1.2em;
+      color: #4a5568;
+    }
+    .toggle-section {
+      text-align: center;
+      margin: 30px 0;
+      padding: 25px;
+      background: #f7fafc;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    .toggle-section label {
+      display: block;
+      margin-bottom: 20px;
+      font-size: 1.3em;
+      font-weight: 600;
+      color: #2d3748;
+    }
+    .button-group {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .dashboard-button {
+      padding: 14px 32px;
+      font-size: 1.2em;
+      background: #4299e1;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 6px 15px rgba(66, 153, 225, 0.3);
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .dashboard-button:hover {
+      background: #3182ce;
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(66, 153, 225, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [positions, setPositions] = useState([]);
+      const [status, setStatus] = useState('Loading positions...');
+      const socket = io();
+
+      async function fetchPositions() {
+        try {
+          const res = await fetch('/positions');
+          const data = await res.json();
+          setPositions(data);
+          setStatus(data.length === 0 ? 'No active positions' : 'Positions loaded');
+        } catch (err) {
+          setStatus('Error loading positions');
+          console.error(err);
+        }
+      }
+
+      async function deletePosition(index) {
+        if (!confirm('Delete this closed position from records?')) return;
+        try {
+          await fetch('/delete-position', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index })
+          });
+          fetchPositions();
+        } catch (err) {
+          alert('Failed to delete position');
+          console.error(err);
+        }
+      }
+
+      async function loadHistoryToggleState() {
+        try {
+          const res = await fetch('/history-data');
+          const data = await res.json();
+          const toggle = document.getElementById('history-toggle');
+          if (toggle) toggle.checked = !!data.enabled;
+        } catch (err) {
+          console.warn('Could not load history toggle state:', err);
+        }
+      }
+
+      async function toggleHistoryTracking(e) {
+        const enable = e.target.checked;
+        try {
+          await fetch('/toggle-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enable })
+          });
+          setStatus(enable ? 'History tracking enabled' : 'History tracking disabled');
+        } catch (err) {
+          alert('Failed to toggle history tracking');
+          console.error(err);
+          e.target.checked = !enable;
+        }
+      }
+
+      useEffect(() => {
+        fetchPositions();
+        loadHistoryToggleState();
+
+        socket.on('positions', (data) => {
+          setPositions(data);
+          setStatus('Positions updated in real-time');
+        });
+
+        socket.on('welcome', (msg) => console.log('Socket welcome:', msg));
+
+        const interval = setInterval(fetchPositions, 10000);
+        return () => clearInterval(interval);
+      }, []);
+
+      return (
+        <div className="container">
+          <h1>Bitunix Trading Bot Dashboard</h1>
+
+          <div className="toggle-section">
+            <label>
+              <input
+                type="checkbox"
+                id="history-toggle"
+                onChange={toggleHistoryTracking}
+              />
+              {' '}Enable History Tracking & Equity Curve
+            </label>
+
+            <div className="button-group">
+              <button
+                onClick={() => window.location.href = '/history'}
+                className="dashboard-button"
+              >
+                📈 View Trading History & Equity Curve →
+              </button>
+
+              <a
+                href="/audit"
+                target="_blank"
+                className="dashboard-button"
+              >
+                📊 View Signal Audit Log →
+              </a>
+            </div>
+          </div>
+
+          {positions.length === 0 ? (
+            <div className="no-positions">No positions yet</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Direction</th>
+                  <th>Avg Entry</th>
+                  <th>Total Qty</th>
+                  <th>SL</th>
+                  <th>TPs Set</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((p, i) => {
+                  const isClosed = p.status === 'closed';
+                  return (
+                    <tr key={i}>
+                      <td>{p.symbol || '-'}</td>
+                      <td>{p.direction || '-'}</td>
+                      <td>{p.avgEntryPrice ? Number(p.avgEntryPrice).toFixed(4) : '0.0000'}</td>
+                      <td>{p.totalQty ? Number(p.totalQty).toFixed(4) : '0.0000'}</td>
+                      <td>{p.sl ? Number(p.sl).toFixed(2) : '-'}</td>
+                      <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
+                      <td>{p.status || 'open'}</td>
+                      <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
+                      <td>
+                        {isClosed ? (
+                          <button 
+                            onClick={() => deletePosition(i)}
+                            style={{
+                              background: '#e74c3c',
+                              color: 'white',
+                              border: 'none',
+                              padding: '6px 10px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.8em'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        ) : (
+                          <button 
+                            disabled
+                            style={{
+                              background: '#95a5a6',
+                              color: '#ecf0f1',
+                              border: 'none',
+                              padding: '6px 10px',
+                              borderRadius: '4px',
+                              cursor: 'not-allowed',
+                              fontSize: '0.8em'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+
+          <div className="status">{status}</div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
