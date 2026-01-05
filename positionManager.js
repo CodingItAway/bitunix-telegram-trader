@@ -213,35 +213,34 @@ if (master.status === 'open' && master.nextTpIndex < master.originalTargets?.len
 
 }
       // === DETECT DCA FILL VIA PENDING ENTRY COUNT DROP ===
-      const currentPendingCount = pendingEntries.length;
-      const previousPendingCount = master.pendingEntryCount ?? currentPendingCount;
+const currentPendingCount = pendingEntries.length;
+const previousPendingCount = master.pendingEntryCount ?? currentPendingCount;
 
-      if (currentPendingCount < previousPendingCount) {
-        const filledCount = previousPendingCount - currentPendingCount;
-        console.log(`🔄 [DCA FILL DETECTED] ${filledCount} entry order(s) filled — position grew`);
-        console.log(`🔄 [LADDER REBUILD] Refreshing full TP ladder + SL for new total qty: ${currentQty.toFixed(6)}`);
+// Calculate new fill qty upfront (safe even if no DCA)
+const newFillQty = currentQty - (master.currentQty || 0);
 
+if (currentPendingCount < previousPendingCount) {
+  const filledCount = previousPendingCount - currentPendingCount;
+  console.log(`🔄 [DCA FILL DETECTED] ${filledCount} entry order(s) filled — position grew (+${newFillQty.toFixed(6)})`);
+  console.log(`🔄 [LADDER REBUILD] Refreshing full TP ladder + SL for new total qty: ${currentQty.toFixed(6)}`);
 
-        const { sendJoinNotification } = require('./utils/joinNotification');
+  // === JOIN ALERT ===
+  const { sendJoinNotification } = require('./utils/joinNotification');
+  await sendJoinNotification(
+    `Ladder Executed`,
+    `Ladder ${filledCount + 1} executed for ${master.symbol}\n` +
+    `+${newFillQty.toFixed(0)} contracts\n` +
+    `Total: ${currentQty.toFixed(0)}`
+  );
 
-        await sendJoinNotification(
-          `TP Ladder Updated — ${master.symbol} ${master.direction}`,
-          `New DCA fill!\n` +
-          `+${newFillQty.toFixed(0)} contracts\n` +
-          `Total: ${currentQty.toFixed(0)} contracts\n` +
-          `Ladder rebuilt (Leg ${filledCount + 1})`
-        );
-        
-        // Reset ladder state — this triggers full rebuild
-        master.nextTpIndex = 0;
-        master.tpSetCount = 0;
-        master.slPlaced = false;
+  // Reset for rebuild
+  master.nextTpIndex = 0;
+  master.tpSetCount = 0;
+  master.slPlaced = false;
+  hasChanges = true;
+}
 
-        hasChanges = true;
-      }
-
-      // Always update for next cycle
-      master.pendingEntryCount = currentPendingCount;
+master.pendingEntryCount = currentPendingCount;
 
       // === PLACE STOP LOSS (self-contained) ===
       if (!master.slPlaced && master.currentQty > 0 && positionId) {
