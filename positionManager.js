@@ -112,6 +112,14 @@ async function managePositions() {
         master._remove = true;
         hasChanges = true;
 
+          // === JOIN ALERT: TRADE CLOSED ===
+  const { sendJoinNotification } = require('./utils/joinNotification');
+  await sendJoinNotification(
+    `Trade Closed — ${master.symbol}`,
+    `${master.direction === 'BUY' ? 'LONG' : 'SHORT'} closed\n` +
+    `Qty: ${master.totalQty.toFixed(6)}\n` +
+    `Avg Entry: $${master.avgEntryPrice.toFixed(6)}`
+  );
 
     // === CANCEL STALE ENTRY ORDERS ===
 if (pendingEntries.length > 0) {
