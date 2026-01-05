@@ -215,6 +215,17 @@ if (master.status === 'open' && master.nextTpIndex < master.originalTargets?.len
         console.log(`🔄 [DCA FILL DETECTED] ${filledCount} entry order(s) filled — position grew`);
         console.log(`🔄 [LADDER REBUILD] Refreshing full TP ladder + SL for new total qty: ${currentQty.toFixed(6)}`);
 
+
+        const { sendJoinNotification } = require('./utils/joinNotification');
+
+        await sendJoinNotification(
+          `TP Ladder Updated — ${master.symbol} ${master.direction}`,
+          `New DCA fill!\n` +
+          `+${newFillQty.toFixed(0)} contracts\n` +
+          `Total: ${currentQty.toFixed(0)} contracts\n` +
+          `Ladder rebuilt (Leg ${filledCount + 1})`
+        );
+        
         // Reset ladder state — this triggers full rebuild
         master.nextTpIndex = 0;
         master.tpSetCount = 0;
