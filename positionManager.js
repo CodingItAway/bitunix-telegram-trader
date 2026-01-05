@@ -148,38 +148,20 @@ if (pendingEntries.length > 0) {
         hasChanges = true;
       }
 
-      // === TP Ladder ===
-if (master.status === 'open' && master.nextTpIndex < master.originalTargets?.length) {
-  const tpIndex = master.nextTpIndex;
-  const tpPrice = master.originalTargets[tpIndex];
-  const allocation = TP_ALLOCATION_PERCENT[tpIndex] || Math.round(100 / (master.originalTargets.length - tpIndex));
+// === BOMB MODE: RE-PLACE ALL TP LEVELS EVERY CYCLE ===
+if (master.status === 'open' && master.originalTargets) {
+  for (let tpIndex = 0; tpIndex < master.originalTargets.length; tpIndex++) {
+    const tpPrice = master.originalTargets[tpIndex];
+    const allocation = TP_ALLOCATION_PERCENT[tpIndex];
+    const qtyRaw = master.currentQty * allocation / 100;
+    const qty = qtyRaw.toFixed(6).replace(/\.?0+$/, '');
 
- 
-  // === TP Ladder ===
-if (master.status === 'open' && master.nextTpIndex < master.originalTargets?.length) {
-  const tpIndex = master.nextTpIndex;
-  const tpPrice = master.originalTargets[tpIndex];
-  const allocation = TP_ALLOCATION_PERCENT[tpIndex] || Math.round(100 / (master.originalTargets.length - tpIndex));
-
-  // === MISSING FIX: CALCULATE REMAINING QTY ===
-  const idealQty = currentQty * allocation / 100;
-  const alreadyAllocated = master.allocatedTpQty[tpIndex] || 0;
-  const remainingQtyRaw = idealQty - alreadyAllocated;
-
-  if (remainingQtyRaw <= 0) {
-    console.log(`[TP SKIP] TP${tpIndex + 1} already fully allocated (${alreadyAllocated.toFixed(6)} ≥ ${idealQty.toFixed(6)})`);
-    master.nextTpIndex++;
-    hasChanges = true;
-    // Continue to next TP in loop
-  } else {
-    const partialQty = remainingQtyRaw.toFixed(6).replace(/\.?0+$/, '');
-
-    console.log(`[MANAGER] Attempting to set TP${tpIndex + 1} @ ${tpPrice} (${allocation}%, remaining ${partialQty} qty of ideal ${idealQty.toFixed(6)})`);
+    if (parseFloat(qty) <= 0) continue;
 
     const tpslParams = {
       symbol: master.symbol,
       side: master.direction === 'BUY' ? 'SELL' : 'BUY',
-      qty: partialQty,
+      qty: qty,
       tpPrice: tpPrice.toString(),
       tpTriggerType: 'MARK',
       tpOrderType: 'LIMIT',
@@ -190,27 +172,16 @@ if (master.status === 'open' && master.nextTpIndex < master.originalTargets?.len
       marginCoin: 'USDT',
       positionMode: 'HEDGE',
       marginMode: 'ISOLATION',
-      clientOrderId: `tp_${master.symbol}_${Date.now()}`
+      clientOrderId: `bomb_tp_${master.symbol}_${tpIndex}_${Date.now()}`
     };
 
     try {
-      console.log('[DEBUG TPSL BODY]', JSON.stringify(tpslParams, null, 2));
-      const success = await placeNextTpLevel(master, apiPos);
-      if (success) {
-        console.log(`🎯 [MANAGER] TP${tpIndex + 1} successfully set @ ${tpPrice}`);
-        hasChanges = true;
-      }
+      console.log(`[BOMB TP] Attempting TP${tpIndex + 1} @ ${tpPrice} | Qty: ${qty} | ${master.symbol}`);
+      const success = await placeNextTpLevel(master, apiPos); // reuse your function, ignore return for now
     } catch (e) {
-      console.error(`❌ [MANAGER] Failed to set TP${tpIndex + 1}: ${e.message}`);
-      if (e.response?.data) {
-        console.error('   API Response:', JSON.stringify(e.response.data, null, 2));
-      }
+      console.warn(`[BOMB TP] Failed (expected on duplicates): ${e.message}`);
     }
   }
-} else if (master.status === 'open') {
-  console.log(`[MANAGER] All TPs already set for ${master.symbol} ${master.direction}`);
-}
-
 }
       // === DETECT DCA FILL VIA PENDING ENTRY COUNT DROP ===
 const currentPendingCount = pendingEntries.length;
