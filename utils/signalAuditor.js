@@ -1,27 +1,44 @@
-// utils/signalAuditor.js
+// utils/signalAuditor.js - Persistent 30-day audit with append + prune
 
 const { loadAudit, saveAudit } = require('../storage/signalAuditStorage');
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-let cache = { signals: [], failures: [] }; // In-memory cache
+let audit = { signals: [], failures: [] }; // Full persistent audit
+
+async function initAudit() {
+  try {
+    const loaded = await loadAudit();
+    audit = loaded || { signals: [], failures: [] };
+    pruneOldEntries();
+    console.log(`[AUDIT] Loaded ${audit.signals.length} signals and ${audit.failures.length} failures from Drive`);
+  } catch (e) {
+    console.warn('[AUDIT] Failed to load audit — starting fresh:', e.message);
+    audit = { signals: [], failures: [] };
+  }
+}
+
+function pruneOldEntries() {
+  const cutoff = Date.now() - THIRTY_DAYS_MS;
+  audit.signals = audit.signals.filter(s => new Date(s.timestamp).getTime() > cutoff);
+  audit.failures = audit.failures.filter(f => new Date(f.timestamp).getTime() > cutoff);
+  console.log(`[AUDIT] Pruned old entries — kept ${audit.signals.length} signals, ${audit.failures.length} failures`);
+}
 
 async function logSignal(signal, outcome, details = {}) {
   const timestamp = new Date().toISOString();
 
-  // Always log minimal signal row
   const signalRow = {
     timestamp,
     symbol: signal?.symbol || 'UNKNOWN',
     direction: signal?.direction || 'UNKNOWN',
     entries: signal?.entries?.join(', ') || '',
     sl: signal?.sl || '',
-    outcome, // 'success' | 'skipped' | 'failed'
+    outcome,
     reason: details.reason || (outcome === 'success' ? 'Executed' : 'Unknown')
   };
 
-  cache.signals.unshift(signalRow); // Newest first
-  if (cache.signals.length > 500) cache.signals.pop(); // Limit total
+  audit.signals.unshift(signalRow); // newest first
 
-  // Only store detailed failure if not success
   if (outcome !== 'success') {
     const failureDetail = {
       timestamp,
@@ -29,16 +46,18 @@ async function logSignal(signal, outcome, details = {}) {
       signal: signal || null,
       rawText: details.rawText || null,
       error: details.error || null,
-      apiResponse: details.apiResponse || null,
       stack: details.stack || new Error().stack,
       ...details
     };
-    cache.failures.unshift(failureDetail);
-    if (cache.failures.length > 100) cache.failures.pop();
+    audit.failures.unshift(failureDetail);
   }
 
-  // Save to Drive every time (lightweight)
-  await saveAudit(cache);
+  // Prune and save
+  pruneOldEntries();
+  await saveAudit(audit);
 }
+
+// Load on startup
+initAudit();
 
 module.exports = { logSignal };
