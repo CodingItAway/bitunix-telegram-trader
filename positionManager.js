@@ -39,151 +39,152 @@ async function managePositions() {
     let hasChanges = false;
 
     for (const master of tracked) {
-      console.log(`[MANAGER] Checking ${master.symbol} ${master.direction} | Status: ${master.status} | Expected Total Qty: ${master.totalQty?.toFixed(6)}`);
-      let shouldRemove = false;
-      // Find matching open position
-      const apiPos = apiPositions.find(p =>
-        p.symbol === master.symbol &&
-        p.side === master.direction
-      );
+  try {
+    console.log(`[MANAGER] Checking ${master.symbol} ${master.direction} | Status: ${master.status} | Expected Total Qty: ${master.totalQty?.toFixed(6)}`);
+    let shouldRemove = false;
+    // Find matching open position
+    const apiPos = apiPositions.find(p =>
+      p.symbol === master.symbol &&
+      p.side === master.direction
+    );
 
-      const positionId = apiPos?.positionId || apiPos?.id || null;
+    const positionId = apiPos?.positionId || apiPos?.id || null;
 
-      if (!positionId && (master.status === 'open' || master.currentQty > 0)) {
-          console.warn('[MANAGER] Warning: No positionId found despite filled qty — cannot place TP/SL');
-          shouldRemove = true;
-        }
-
-      // Robust qty parsing
-      const currentQty = apiPos
-        ? parseFloat(
-            apiPos.qty ||
-            apiPos.positionQty ||
-            apiPos.holdQty ||
-            apiPos.positionAmt ||
-            apiPos.availQty ||
-            apiPos.positionSize ||
-            0
-          )
-        : 0;
-
-      master.currentQty = currentQty;
-      master.lastUpdated = new Date().toISOString();
-
-      console.log(`  → Detected current qty: ${currentQty.toFixed(6)}`);
-
-      // === Pending entry orders filter ===
-      const pendingEntries = apiPendingOrders.filter(o =>
-        o.symbol === master.symbol &&
-        o.side === master.direction &&
-        o.orderType === 'LIMIT' &&
-        o.reduceOnly === false &&
-        o.status === 'NEW_' &&
-        o.tradeQty === '0'
-      );
-
-      if (pendingEntries.length > 0) {
-        console.log(`  → Found ${pendingEntries.length} pending entry orders:`);
-        pendingEntries.forEach((order, idx) => {
-          console.log(`     #${idx + 1}: ${order.qty} @ ${order.price} | Status: ${order.status} | TradeQty: ${order.tradeQty} | Order ID: ${order.orderId}`);
-        });
-      } else {
-        console.log(`  → No pending entry orders found for this master`);
+    if (!positionId && (master.status === 'open' || master.currentQty > 0)) {
+        console.warn('[MANAGER] Warning: No positionId found despite filled qty — cannot place TP/SL');
+        shouldRemove = true;
       }
 
-      // === Fill progress ===
-      console.log(`  → Fill progress: ${currentQty.toFixed(6)} filled / ${master.totalQty?.toFixed(6)} expected`);
+    // Robust qty parsing
+    const currentQty = apiPos
+      ? parseFloat(
+          apiPos.qty ||
+          apiPos.positionQty ||
+          apiPos.holdQty ||
+          apiPos.positionAmt ||
+          apiPos.availQty ||
+          apiPos.positionSize ||
+          0
+        )
+      : 0;
 
-            // === CLOSE LOGIC - Only when truly closed/canceled ===
-      const wasActive = master.status === 'open' || master.status === 'pending_fill';
-      const hasNoQuantity = currentQty < 0.001;
-      const hasNoPendingEntries = pendingEntries.length === 0;
+    master.currentQty = currentQty;
+    master.lastUpdated = new Date().toISOString();
 
-      let isTrulyClosed = wasActive && hasNoQuantity && hasNoPendingEntries;
-      if(shouldRemove)
-      {
-        isTrulyClosed = true; // Force removal if no positionId
-      }
+    console.log(`  → Detected current qty: ${currentQty.toFixed(6)}`);
 
-      if (isTrulyClosed) {
-        master.status = 'closed';
-        master.closedAt = new Date().toISOString();
-        console.log(`❌ [MANAGER] Position fully closed/canceled: ${master.symbol} ${master.direction} (no qty, no pending orders)`);
-        master._remove = true;
-        hasChanges = true;
+    // === Pending entry orders filter ===
+    const pendingEntries = apiPendingOrders.filter(o =>
+      o.symbol === master.symbol &&
+      o.side === master.direction &&
+      o.orderType === 'LIMIT' &&
+      o.reduceOnly === false &&
+      o.status === 'NEW_' &&
+      o.tradeQty === '0'
+    );
 
-          // === JOIN ALERT: TRADE CLOSED ===
-  const { sendJoinNotification } = require('./utils/joinNotification');
-  await sendJoinNotification(
-    `Trade Closed`,
-    '${master.symbol}'
-  );
+    if (pendingEntries.length > 0) {
+      console.log(`  → Found ${pendingEntries.length} pending entry orders:`);
+      pendingEntries.forEach((order, idx) => {
+        console.log(`     #${idx + 1}: ${order.qty} @ ${order.price} | Status: ${order.status} | TradeQty: ${order.tradeQty} | Order ID: ${order.orderId}`);
+      });
+    } else {
+      console.log(`  → No pending entry orders found for this master`);
+    }
 
-    // === CANCEL STALE ENTRY ORDERS ===
+    // === Fill progress ===
+    console.log(`  → Fill progress: ${currentQty.toFixed(6)} filled / ${master.totalQty?.toFixed(6)} expected`);
+
+          // === CLOSE LOGIC - Only when truly closed/canceled ===
+    const wasActive = master.status === 'open' || master.status === 'pending_fill';
+    const hasNoQuantity = currentQty < 0.001;
+    const hasNoPendingEntries = pendingEntries.length === 0;
+
+    let isTrulyClosed = wasActive && hasNoQuantity && hasNoPendingEntries;
+    if(shouldRemove)
+    {
+      isTrulyClosed = true; // Force removal if no positionId
+    }
+
+    if (isTrulyClosed) {
+      master.status = 'closed';
+      master.closedAt = new Date().toISOString();
+      console.log(`❌ [MANAGER] Position fully closed/canceled: ${master.symbol} ${master.direction} (no qty, no pending orders)`);
+      master._remove = true;
+      hasChanges = true;
+
+        // === JOIN ALERT: TRADE CLOSED ===
+const { sendJoinNotification } = require('./utils/joinNotification');
+await sendJoinNotification(
+  `Trade Closed`,
+  '${master.symbol}'
+);
+
+  // === CANCEL STALE ENTRY ORDERS ===
 if (pendingEntries.length > 0) {
-  console.log(`🧹 [CLEANUP] Canceling ${pendingEntries.length} stale entry orders via batch`);
+console.log(`🧹 [CLEANUP] Canceling ${pendingEntries.length} stale entry orders via batch`);
 
-  const orderIds = pendingEntries.map(o => o.orderId);
-  
-  const allCanceled = await client.cancelOrders(orderIds, master.symbol);
+const orderIds = pendingEntries.map(o => o.orderId);
 
-  if (allCanceled) {
-    console.log(`🧹 [CLEANUP] All ${pendingEntries.length} stale orders canceled successfully`);
-  } else {
-    console.warn(`⚠️ [CLEANUP] Some stale orders failed to cancel — manual review recommended`);
-  }
+const allCanceled = await client.cancelOrders(orderIds, master.symbol);
+
+if (allCanceled) {
+  console.log(`🧹 [CLEANUP] All ${pendingEntries.length} stale orders canceled successfully`);
 } else {
-  console.log(`🧹 [CLEANUP] No stale entry orders to cancel`);
+  console.warn(`⚠️ [CLEANUP] Some stale orders failed to cancel — manual review recommended`);
+}
+} else {
+console.log(`🧹 [CLEANUP] No stale entry orders to cancel`);
 }
 
-      } else if (wasActive && hasNoQuantity && !hasNoPendingEntries) {
-        // This is normal — still waiting for limit orders to fill
-        console.log(`⏳ [MANAGER] Still waiting for entry orders to fill: ${pendingEntries.length} pending`);
-      }
+    } else if (wasActive && hasNoQuantity && !hasNoPendingEntries) {
+      // This is normal — still waiting for limit orders to fill
+      console.log(`⏳ [MANAGER] Still waiting for entry orders to fill: ${pendingEntries.length} pending`);
+    }
 
-      // === Transition to open ===
-      if (master.status === 'pending_fill' && currentQty >= 0.0001) {
-        master.status = 'open';
-        console.log(`✅ [MANAGER] Position filled: ${master.symbol} ${master.direction} | Qty ${currentQty.toFixed(6)}`);
-        hasChanges = true;
-      }
+    // === Transition to open ===
+    if (master.status === 'pending_fill' && currentQty >= 0.0001) {
+      master.status = 'open';
+      console.log(`✅ [MANAGER] Position filled: ${master.symbol} ${master.direction} | Qty ${currentQty.toFixed(6)}`);
+      hasChanges = true;
+    }
 
 // === BOMB MODE: RE-PLACE ALL TP LEVELS EVERY CYCLE ===
 if (master.status === 'open' && master.originalTargets) {
-  for (let tpIndex = 0; tpIndex < master.originalTargets.length; tpIndex++) {
-    const tpPrice = master.originalTargets[tpIndex];
-    const allocation = TP_ALLOCATION_PERCENT[tpIndex];
-    const qtyRaw = master.currentQty * allocation / 100;
-    const qty = qtyRaw.toFixed(6).replace(/\.?0+$/, '');
+for (let tpIndex = 0; tpIndex < master.originalTargets.length; tpIndex++) {
+  const tpPrice = master.originalTargets[tpIndex];
+  const allocation = TP_ALLOCATION_PERCENT[tpIndex];
+  const qtyRaw = master.currentQty * allocation / 100;
+  const qty = qtyRaw.toFixed(6).replace(/\.?0+$/, '');
 
-    if (parseFloat(qty) <= 0) continue;
+  if (parseFloat(qty) <= 0) continue;
 
-    const tpslParams = {
-      symbol: master.symbol,
-      side: master.direction === 'BUY' ? 'SELL' : 'BUY',
-      qty: qty,
-      tpPrice: tpPrice.toString(),
-      tpTriggerType: 'MARK',
-      tpOrderType: 'LIMIT',
-      tpLimitPrice: master.direction === 'BUY'
-        ? (tpPrice * 1.001).toString()
-        : (tpPrice * 0.999).toString(),
-      reduceOnly: true,
-      marginCoin: 'USDT',
-      positionMode: 'HEDGE',
-      marginMode: 'ISOLATION',
-      clientOrderId: `bomb_tp_${master.symbol}_${tpIndex}_${Date.now()}`
-    };
+  const tpslParams = {
+    symbol: master.symbol,
+    side: master.direction === 'BUY' ? 'SELL' : 'BUY',
+    qty: qty,
+    tpPrice: tpPrice.toString(),
+    tpTriggerType: 'MARK',
+    tpOrderType: 'LIMIT',
+    tpLimitPrice: master.direction === 'BUY'
+      ? (tpPrice * 1.001).toString()
+      : (tpPrice * 0.999).toString(),
+    reduceOnly: true,
+    marginCoin: 'USDT',
+    positionMode: 'HEDGE',
+    marginMode: 'ISOLATION',
+    clientOrderId: `bomb_tp_${master.symbol}_${tpIndex}_${Date.now()}`
+  };
 
-    try {
-      console.log(`[BOMB TP] Attempting TP${tpIndex + 1} @ ${tpPrice} | Qty: ${qty} | ${master.symbol}`);
-      const success = await placeNextTpLevel(master, apiPos); // reuse your function, ignore return for now
-    } catch (e) {
-      console.warn(`[BOMB TP] Failed (expected on duplicates): ${e.message}`);
-    }
+  try {
+    console.log(`[BOMB TP] Attempting TP${tpIndex + 1} @ ${tpPrice} | Qty: ${qty} | ${master.symbol}`);
+    const success = await placeNextTpLevel(master, apiPos);
+  } catch (e) {
+    console.warn(`[BOMB TP] Failed (expected on duplicates): ${e.message}`);
   }
 }
-      // === DETECT DCA FILL VIA PENDING ENTRY COUNT DROP ===
+}
+    // === DETECT DCA FILL VIA PENDING ENTRY COUNT DROP ===
 const currentPendingCount = pendingEntries.length;
 const previousPendingCount = master.pendingEntryCount ?? currentPendingCount;
 
@@ -191,9 +192,9 @@ const previousPendingCount = master.pendingEntryCount ?? currentPendingCount;
 const newFillQty = currentQty - (master.currentQty || 0);
 
 if (currentPendingCount < previousPendingCount) {
-  const filledCount = previousPendingCount - currentPendingCount;
-  console.log(`🔄 [DCA FILL DETECTED] ${filledCount} entry order(s) filled — position grew (+${newFillQty.toFixed(6)})`);
-  console.log(`🔄 [LADDER REBUILD] Refreshing full TP ladder + SL for new total qty: ${currentQty.toFixed(6)}`);
+const filledCount = previousPendingCount - currentPendingCount;
+console.log(`🔄 [DCA FILL DETECTED] ${filledCount} entry order(s) filled — position grew (+${newFillQty.toFixed(6)})`);
+console.log(`🔄 [LADDER REBUILD] Refreshing full TP ladder + SL for new total qty: ${currentQty.toFixed(6)}`);
 
   // === JOIN ALERT ===
   const { sendJoinNotification } = require('./utils/joinNotification');
@@ -213,54 +214,60 @@ if (currentPendingCount < previousPendingCount) {
 
 master.pendingEntryCount = currentPendingCount;
 
-      // === PLACE STOP LOSS (self-contained) ===
-      if (!master.slPlaced && master.currentQty > 0 && positionId) {
-        console.log(`[MANAGER] Placing Stop Loss @ ${master.sl} for ${master.currentQty} contracts`);
+    // === PLACE STOP LOSS (self-contained) ===
+    if (!master.slPlaced && master.currentQty > 0 && positionId) {
+      console.log(`[MANAGER] Placing Stop Loss @ ${master.sl} for ${master.currentQty} contracts`);
 
-        const fetch = require('node-fetch');
-        const CryptoJS = require('crypto-js');
+      const fetch = require('node-fetch');
+      const CryptoJS = require('crypto-js');
 
-        const slParams = {
-          symbol: master.symbol,
-          positionId: positionId.toString(),
-          slPrice: master.sl.toString(),
-          slStopType: 'MARK_PRICE',
-          slOrderType: 'MARKET',
-          slQty: master.currentQty.toFixed(6).replace(/\.?0+$/, '')
-        };
+      const slParams = {
+        symbol: master.symbol,
+        positionId: positionId.toString(),
+        slPrice: master.sl.toString(),
+        slStopType: 'MARK_PRICE',
+        slOrderType: 'MARKET',
+        slQty: master.currentQty.toFixed(6).replace(/\.?0+$/, '')
+      };
 
-        const timestamp = Date.now().toString();
-        const nonce = CryptoJS.lib.WordArray.random(16).toString();
-        const bodyStr = JSON.stringify(slParams);
-        const digestInput = nonce + timestamp + process.env.BITUNIX_API_KEY + '' + bodyStr;
-        const digest = CryptoJS.SHA256(digestInput).toString();
-        const sign = CryptoJS.SHA256(digest + process.env.BITUNIX_API_SECRET).toString();
+      const timestamp = Date.now().toString();
+      const nonce = CryptoJS.lib.WordArray.random(16).toString();
+      const bodyStr = JSON.stringify(slParams);
+      const digestInput = nonce + timestamp + process.env.BITUNIX_API_KEY + '' + bodyStr;
+      const digest = CryptoJS.SHA256(digestInput).toString();
+      const sign = CryptoJS.SHA256(digest + process.env.BITUNIX_API_SECRET).toString();
 
-        try {
-          const response = await fetch('https://fapi.bitunix.com/api/v1/futures/tpsl/place_order', {
-            method: 'POST',
-            headers: {
-              'api-key': process.env.BITUNIX_API_KEY,
-              'nonce': nonce,
-              'timestamp': timestamp,
-              'sign': sign,
-              'Content-Type': 'application/json',
-              'language': 'en-US'
-            },
-            body: bodyStr
-          });
+      try {
+        const response = await fetch('https://fapi.bitunix.com/api/v1/futures/tpsl/place_order', {
+          method: 'POST',
+          headers: {
+            'api-key': process.env.BITUNIX_API_KEY,
+            'nonce': nonce,
+            'timestamp': timestamp,
+            'sign': sign,
+            'Content-Type': 'application/json',
+            'language': 'en-US'
+          },
+          body: bodyStr
+        });
 
-          const data = await response.json();
-          if (data.code !== 0) throw new Error(data.msg || 'SL failed');
+        const data = await response.json();
+        if (data.code !== 0) throw new Error(data.msg || 'SL failed');
 
-          console.log(`🛡️ [MANAGER] Stop Loss successfully placed @ ${master.sl}`);
-          master.slPlaced = true;
-          hasChanges = true;
-        } catch (e) {
-          console.error(`❌ [MANAGER] SL placement failed: ${e.message}`);
-        }
+        console.log(`🛡️ [MANAGER] Stop Loss successfully placed @ ${master.sl}`);
+        master.slPlaced = true;
+        hasChanges = true;
+      } catch (e) {
+        console.error(`❌ [MANAGER] SL placement failed: ${e.message}`);
       }
     }
+
+  } catch (assetError) {
+    console.error(`[MANAGER] Error processing ${master.symbol} ${master.direction} — skipping to next asset:`, assetError.message);
+    if (assetError.stack) console.error(assetError.stack);
+    continue; // ← This ensures the loop moves to the next master
+  }
+}
 
           // === Final cleanup: remove truly closed masters ===
     const closedMasters = tracked.filter(p => p._remove);
