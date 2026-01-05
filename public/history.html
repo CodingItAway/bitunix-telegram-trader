@@ -198,34 +198,45 @@
       }, [data.closedPositions, symbolFilter, sideFilter, dateRangeDays]);
 
       useEffect(() => {
-        if (!data.enabled || data.curve.length === 0) return;
+  if (!data.enabled || data.curve.length === 0) return;
 
-        const ctx = document.getElementById('equityChart').getContext('2d');
-        if (chart) chart.destroy();
+  const ctx = document.getElementById('equityChart').getContext('2d');
+  if (chart) chart.destroy();
 
-        const newChart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: data.curve.map(p => new Date(p.timestamp).toLocaleString()),
-            datasets: [{
-              label: 'Equity Curve (USDT)',
-              data: data.curve.map(p => parseFloat(p.equity.toFixed(2))),
-              borderColor: '#4299e1',
-              backgroundColor: 'rgba(66, 153, 225, 0.1)',
-              fill: true,
-              tension: 0.2,
-              pointRadius: 3
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { y: { beginAtZero: false } },
-            plugins: { legend: { display: true } }
-          }
-        });
-        setChart(newChart);
-      }, [data.curve, data.enabled]);
+  // === BUILD CURVE WITH LIVE FINAL POINT ===
+  const curvePoints = [...data.curve];
+
+  // Append live equity as the final point if available
+  if (liveCurrentEquity > 0) {
+    curvePoints.push({
+      timestamp: Date.now(),
+      equity: liveCurrentEquity
+    });
+  }
+
+  const newChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: curvePoints.map(p => new Date(p.timestamp).toLocaleString()),
+      datasets: [{
+        label: 'Equity Curve (USDT)',
+        data: curvePoints.map(p => parseFloat(p.equity.toFixed(2))),
+        borderColor: '#4299e1',
+        backgroundColor: 'rgba(66, 153, 225, 0.1)',
+        fill: true,
+        tension: 0.2,
+        pointRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: false } },
+      plugins: { legend: { display: true } }
+    }
+  });
+  setChart(newChart);
+}, [data.curve, data.enabled, liveCurrentEquity]);
 
       const totalPages = Math.ceil(filteredTrades.length / PAGE_SIZE);
       const startIdx = (currentPage - 1) * PAGE_SIZE;
