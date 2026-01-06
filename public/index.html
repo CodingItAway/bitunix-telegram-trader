@@ -115,6 +115,34 @@
       transform: translateY(-3px);
       box-shadow: 0 10px 25px rgba(66, 153, 225, 0.4);
     }
+
+    /* Margin Usage Bar */
+    .margin-usage-bar {
+      margin: 30px 0;
+      padding: 0 10px;
+    }
+    .margin-usage-bar .label {
+      margin-bottom: 10px;
+      font-size: 1.3em;
+      font-weight: 600;
+      color: #2d3748;
+      text-align: center;
+    }
+    .bar-container {
+      width: 100%;
+      height: 28px;
+      background-color: #1e293b;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981 0%, #3b82f6 50%, #8b5cf6 100%);
+      border-radius: 14px;
+      transition: width 1s ease;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+    }
   </style>
 </head>
 <body>
@@ -134,10 +162,24 @@
           const data = await res.json();
           setPositions(data);
           setStatus(data.length === 0 ? 'No active positions' : 'Positions loaded');
+          updateMarginBar(data);
         } catch (err) {
           setStatus('Error loading positions');
           console.error(err);
         }
+      }
+
+      function updateMarginBar(data) {
+        // Replace with your actual equity source (e.g., separate endpoint or from data)
+        // For now, using a placeholder — you'll need to get real equity
+        const equity = 1058.27; // <-- REPLACE with real equity from socket or API
+        const positionMargin = data.reduce((sum, p) => sum + (p.margin || 0), 0);
+        const pct = equity > 0 ? (positionMargin / equity * 100) : 0;
+
+        document.getElementById('margin-pct').textContent = pct.toFixed(1) + '%';
+        document.getElementById('margin-used').textContent = positionMargin.toFixed(2);
+        document.getElementById('equity-total').textContent = equity.toFixed(2);
+        document.getElementById('margin-fill').style.width = Math.min(pct, 100) + '%';
       }
 
       async function deletePosition(index) {
@@ -189,9 +231,8 @@
         socket.on('positions', (data) => {
           setPositions(data);
           setStatus('Positions updated in real-time');
+          updateMarginBar(data);
         });
-
-        socket.on('welcome', (msg) => console.log('Socket welcome:', msg));
 
         const interval = setInterval(fetchPositions, 10000);
         return () => clearInterval(interval);
@@ -228,6 +269,17 @@
             </div>
           </div>
 
+          {/* Margin Usage Bar */}
+          <div className="margin-usage-bar">
+            <div className="label">
+              Margin Usage: <strong id="margin-pct">0.0%</strong> 
+              (<span id="margin-used">0.00</span> / <span id="equity-total">0.00</span> USDT)
+            </div>
+            <div className="bar-container">
+              <div className="bar-fill" id="margin-fill" style={{ width: '0%' }}></div>
+            </div>
+          </div>
+
           {positions.length === 0 ? (
             <div className="no-positions">No positions yet</div>
           ) : (
@@ -254,7 +306,7 @@
                       <td>{p.direction || '-'}</td>
                       <td>{p.avgEntryPrice ? Number(p.avgEntryPrice).toFixed(4) : '0.0000'}</td>
                       <td>{p.totalQty ? Number(p.totalQty).toFixed(4) : '0.0000'}</td>
-                      <td>{p.sl ? Number(p.sl).toFixed(6) : '-'}</td>
+                      <td>{p.sl ? Number(p.sl) : '-'}</td>
                       <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
                       <td>{p.status || 'open'}</td>
                       <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
