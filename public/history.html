@@ -159,7 +159,7 @@
       useEffect(() => {
         async function fetchData() {
           try {
-            const res = await fetch('/api/history');
+            const res = await fetch('/history-data'); // ← Your existing route
             if (!res.ok) throw new Error('Failed to fetch history');
             const json = await res.json();
             setData(json);
@@ -170,7 +170,7 @@
           }
         }
         fetchData();
-        const interval = setInterval(fetchData, 30000); // Refresh every 30s
+        const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
       }, []);
 
@@ -197,8 +197,7 @@
         });
       }
 
-      // Append live equity as final point
-      const liveEquity = data.liveEquity || runningEquity;
+      const liveEquity = data.currentEquity || runningEquity; // use your existing field
       curve.push({
         timestamp: Date.now(),
         equity: liveEquity,
@@ -207,7 +206,6 @@
 
       curve.sort((a, b) => a.timestamp - b.timestamp);
 
-      // Prepare chart data
       const chartData = {
         labels: curve.map(p => new Date(p.timestamp).toLocaleDateString()),
         datasets: [{
@@ -263,9 +261,9 @@
       const startIdx = (currentPage - 1) * PAGE_SIZE;
       const paginatedTrades = trades.slice(startIdx, startIdx + PAGE_SIZE);
 
-      // Calculate margin usage (if positionMargin is available, else estimate)
-      const positionMargin = data.positionMargin || 0; // add this to your /api/history response if possible
-      const equity = data.liveEquity || data.initialBalance;
+      // Margin usage (fallback to 0 if no positionMargin)
+      const positionMargin = data.positionMargin || 0;
+      const equity = liveEquity;
       const marginPct = equity > 0 ? (positionMargin / equity * 100) : 0;
 
       return (
