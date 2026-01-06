@@ -58,53 +58,76 @@
       background: #f8fafc;
       padding: 20px;
       border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }
     table {
       width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
+      border-collapse: collapse;
+      margin-top: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
     }
     th {
       background: #4299e1;
       color: white;
-      padding: 16px;
+      padding: 18px;
       text-align: left;
     }
     td {
-      padding: 14px 16px;
-      background: #ffffff;
+      padding: 16px 18px;
       border-bottom: 1px solid #edf2f7;
     }
-    tr:nth-child(even) td { background: #f7fafc; }
-    tr:hover td { background: #ebf8ff; }
+    tr:nth-child(even) td {
+      background: #f7fafc;
+    }
     .pnl-positive { color: #48bb78; font-weight: bold; }
     .pnl-negative { color: #f56565; font-weight: bold; }
     .pagination {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
+      text-align: center;
       margin-top: 30px;
-      font-size: 1.1em;
+      padding: 20px;
     }
     .pagination button {
-      padding: 8px 16px;
-      border: none;
+      padding: 10px 20px;
+      margin: 0 10px;
       background: #4299e1;
       color: white;
-      border-radius: 6px;
+      border: none;
+      border-radius: 8px;
       cursor: pointer;
     }
     .pagination button:disabled {
       background: #a0aec0;
       cursor: not-allowed;
     }
-    .pagination span {
-      color: #4a5568;
+
+    /* Margin Usage Bar */
+    .margin-usage-bar {
+      margin: 30px 0;
+      padding: 0 20px;
+    }
+    .margin-usage-bar .label {
+      margin-bottom: 10px;
+      font-size: 1.4em;
+      font-weight: 600;
+      color: #2d3748;
+      text-align: center;
+    }
+    .bar-container {
+      width: 100%;
+      height: 32px;
+      background-color: #1e293b;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981 0%, #3b82f6 60%, #8b5cf6 100%);
+      border-radius: 16px;
+      transition: width 1.2s ease;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.7);
     }
   </style>
 </head>
@@ -125,210 +148,199 @@
     };
 
     function App() {
-      const [data, setData] = useState({ enabled: false, closedPositions: [], curve: [], initialBalance: 0, currentEquity: 0 });
-      const [filteredTrades, setFilteredTrades] = useState([]);
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [searchTerm, setSearchTerm] = useState('');
+      const [sortField, setSortField] = useState('closeTime');
+      const [sortDir, setSortDir] = useState('desc');
       const [currentPage, setCurrentPage] = useState(1);
-      const [symbolFilter, setSymbolFilter] = useState('');
-      const [sideFilter, setSideFilter] = useState('ALL');
-      const [dateRangeDays, setDateRangeDays] = useState(7);
-      const [chart, setChart] = useState(null);
-      const [liveCurrentEquity, setLiveCurrentEquity] = useState(0);
-
-      const loadHistory = async () => {
-        try {
-          const res = await fetch('/history-data');
-          const json = await res.json();
-          setData(json);
-        } catch (err) {
-          console.error('Failed to load history:', err);
-        }
-      };
-
-      const fetchLiveEquity = async () => {
-        try {
-          const res = await fetch('/api/live-equity');
-          if (!res.ok) return;
-          const json = await res.json();
-          if (json.error) return;
-          setLiveCurrentEquity(parseFloat(json.equity));
-        } catch (err) {
-          console.error('Live equity fetch failed:', err);
-        }
-      };
 
       useEffect(() => {
-        loadHistory();
-        const historyInterval = setInterval(loadHistory, 30000);
-        fetchLiveEquity();
-        const liveInterval = setInterval(fetchLiveEquity, 5000);
-
-        return () => {
-          clearInterval(historyInterval);
-          clearInterval(liveInterval);
-        };
+        async function fetchData() {
+          try {
+            const res = await fetch('/api/history');
+            if (!res.ok) throw new Error('Failed to fetch history');
+            const json = await res.json();
+            setData(json);
+          } catch (err) {
+            setError(err.message);
+          } finally {
+            setLoading(false);
+          }
+        }
+        fetchData();
+        const interval = setInterval(fetchData, 30000); // Refresh every 30s
+        return () => clearInterval(interval);
       }, []);
 
-      // Apply filters and sort newest first
+      if (loading) return <div className="container"><h1>Loading history...</h1></div>;
+      if (error) return <div className="container"><h1>Error: {error}</h1></div>;
+      if (!data.enabled) return <div className="container"><h1>History tracking is disabled</h1></div>;
+
+      // === BUILD CURVE WITH LIVE FINAL POINT ===
+      const curve = [];
+      let runningEquity = data.initialBalance;
+
+      curve.push({
+        timestamp: new Date(data.featureEnabledAt).getTime(),
+        equity: runningEquity,
+        label: 'Start'
+      });
+
+      for (const pos of data.closedPositions) {
+        runningEquity += pos.realizedPNL;
+        curve.push({
+          timestamp: pos.closeTime,
+          equity: runningEquity,
+          label: `${pos.symbol} ${pos.side} PNL: ${pos.realizedPNL.toFixed(4)}`
+        });
+      }
+
+      // Append live equity as final point
+      const liveEquity = data.liveEquity || runningEquity;
+      curve.push({
+        timestamp: Date.now(),
+        equity: liveEquity,
+        label: 'Live Balance (incl. unrealized)'
+      });
+
+      curve.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Prepare chart data
+      const chartData = {
+        labels: curve.map(p => new Date(p.timestamp).toLocaleDateString()),
+        datasets: [{
+          label: 'Equity Curve (USDT)',
+          data: curve.map(p => p.equity),
+          borderColor: '#4299e1',
+          backgroundColor: 'rgba(66, 153, 225, 0.1)',
+          tension: 0.4,
+          fill: true
+        }]
+      };
+
       useEffect(() => {
-        if (!data.closedPositions) return;
+        const ctx = document.getElementById('equityChart').getContext('2d');
+        const chart = new Chart(ctx, {
+          type: 'line',
+          data: chartData,
+          options: {
+            responsive: true,
+            plugins: {
+              tooltip: {
+                callbacks: {
+                  label: (context) => `$${context.parsed.y.toFixed(2)}`
+                }
+              },
+              legend: { position: 'top' }
+            },
+            scales: {
+              y: { beginAtZero: false }
+            }
+          }
+        });
+        return () => chart.destroy();
+      }, [chartData]);
 
-        let trades = [...data.closedPositions]; // copy
+      // Filter & sort trades
+      let trades = data.closedPositions || [];
+      if (searchTerm) {
+        trades = trades.filter(t => 
+          t.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          t.side.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
 
-        // Date filter
-        if (dateRangeDays > 0) {
-          const cutoff = Date.now() - (dateRangeDays * 24 * 60 * 60 * 1000);
-          trades = trades.filter(t => t.closeTime >= cutoff);
-        }
+      trades.sort((a, b) => {
+        const aVal = a[sortField];
+        const bVal = b[sortField];
+        if (sortDir === 'asc') return aVal > bVal ? 1 : -1;
+        return aVal < bVal ? 1 : -1;
+      });
 
-        // Symbol filter
-        if (symbolFilter) {
-          trades = trades.filter(t => t.symbol.toLowerCase().includes(symbolFilter.toLowerCase()));
-        }
-
-        // Side filter
-        if (sideFilter !== 'ALL') {
-          trades = trades.filter(t => t.side === sideFilter);
-        }
-
-        // SORT BY NEWEST FIRST
-        trades.sort((a, b) => b.closeTime - a.closeTime);
-
-        setFilteredTrades(trades);
-        setCurrentPage(1);
-      }, [data.closedPositions, symbolFilter, sideFilter, dateRangeDays]);
-
-      useEffect(() => {
-  if (!data.enabled || data.curve.length === 0) return;
-
-  const ctx = document.getElementById('equityChart').getContext('2d');
-  if (chart) chart.destroy();
-
-  // === BUILD CURVE WITH LIVE FINAL POINT ===
-  const curvePoints = [...data.curve];
-
-  // Append live equity as the final point if available
-  if (liveCurrentEquity > 0) {
-    curvePoints.push({
-      timestamp: Date.now(),
-      equity: liveCurrentEquity
-    });
-  }
-
-  const newChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: curvePoints.map(p => new Date(p.timestamp).toLocaleString()),
-      datasets: [{
-        label: 'Equity Curve (USDT)',
-        data: curvePoints.map(p => parseFloat(p.equity.toFixed(2))),
-        borderColor: '#4299e1',
-        backgroundColor: 'rgba(66, 153, 225, 0.1)',
-        fill: true,
-        tension: 0.2,
-        pointRadius: 3
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: { y: { beginAtZero: false } },
-      plugins: { legend: { display: true } }
-    }
-  });
-  setChart(newChart);
-}, [data.curve, data.enabled, liveCurrentEquity]);
-
-      const totalPages = Math.ceil(filteredTrades.length / PAGE_SIZE);
+      const totalPages = Math.ceil(trades.length / PAGE_SIZE);
       const startIdx = (currentPage - 1) * PAGE_SIZE;
-      const paginatedTrades = filteredTrades.slice(startIdx, startIdx + PAGE_SIZE);
+      const paginatedTrades = trades.slice(startIdx, startIdx + PAGE_SIZE);
 
-      const displayEquity = liveCurrentEquity > 0 ? liveCurrentEquity : parseFloat(data.currentEquity);
+      // Calculate margin usage (if positionMargin is available, else estimate)
+      const positionMargin = data.positionMargin || 0; // add this to your /api/history response if possible
+      const equity = data.liveEquity || data.initialBalance;
+      const marginPct = equity > 0 ? (positionMargin / equity * 100) : 0;
 
       return (
         <div className="container">
           <h1>Bitunix History & Equity Curve</h1>
-          <div style={{ textAlign: 'left', marginBottom: '20px' }}>
-            <button
-              onClick={() => window.location.href = '/'}
-              style={{
-                padding: '10px 20px',
-                fontSize: '1.1em',
-                background: '#718096',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              ← Back to Dashboard
-            </button>
+          
+          <div className="status">
+            Tracking since {new Date(data.featureEnabledAt).toLocaleString()} 
+            | Start: ${data.initialBalance.toFixed(2)} 
+            | Current: <strong>${liveEquity.toFixed(2)}</strong> (live)
           </div>
 
-          {!data.enabled ? (
-            <div className="status">History tracking is disabled. Enable it from the main dashboard.</div>
+          {/* Margin Usage Bar */}
+          <div className="margin-usage-bar">
+            <div className="label">
+              Margin Usage: <strong>{marginPct.toFixed(1)}%</strong> 
+              (${positionMargin.toFixed(2)} / ${equity.toFixed(2)} USDT)
+            </div>
+            <div className="bar-container">
+              <div className="bar-fill" style={{ width: `${Math.min(marginPct, 100)}%` }}></div>
+            </div>
+          </div>
+
+          <div id="chartContainer">
+            <canvas id="equityChart"></canvas>
+          </div>
+
+          <div className="filters">
+            <input 
+              type="text" 
+              placeholder="Search symbol or side..." 
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            />
+            <select value={sortField} onChange={(e) => setSortField(e.target.value)}>
+              <option value="closeTime">Close Time</option>
+              <option value="symbol">Symbol</option>
+              <option value="realizedPNL">PNL</option>
+            </select>
+            <select value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </select>
+          </div>
+
+          {trades.length === 0 ? (
+            <p>No closed trades yet.</p>
           ) : (
             <>
-              <div className="status">
-                Tracking since {new Date(data.curve[0]?.timestamp).toLocaleString()} 
-                {' | '} Start: ${parseFloat(data.initialBalance).toFixed(2)} 
-                {' | '} Current: <strong>${displayEquity.toFixed(2)}</strong> (live)
-              </div>
-
-              <div id="chartContainer">
-                <canvas id="equityChart"></canvas>
-              </div>
-
-              <div className="filters">
-                <select value={dateRangeDays} onChange={(e) => setDateRangeDays(Number(e.target.value))}>
-                  {Object.entries(DATE_RANGES).map(([days, label]) => (
-                    <option key={days} value={days}>{label}</option>
-                  ))}
-                </select>
-
-                <input
-                  type="text"
-                  placeholder="Search symbol..."
-                  value={symbolFilter}
-                  onChange={(e) => setSymbolFilter(e.target.value)}
-                />
-
-                <select value={sideFilter} onChange={(e) => setSideFilter(e.target.value)}>
-                  <option value="ALL">All Sides</option>
-                  <option value="BUY">Long Only</option>
-                  <option value="SELL">Short Only</option>
-                </select>
-              </div>
-
               <table>
                 <thead>
                   <tr>
+                    <th>Close Time</th>
                     <th>Symbol</th>
                     <th>Side</th>
-                    <th>Entry Price</th>
-                    <th>Exit Price</th>
+                    <th>Entry</th>
+                    <th>Close</th>
                     <th>Qty</th>
                     <th>Realized PNL</th>
-                    <th>Close Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedTrades.length === 0 ? (
-                    <tr><td colSpan="7" style={{textAlign: 'center', padding: '40px'}}>No trades found</td></tr>
-                  ) : (
-                    paginatedTrades.map((p, i) => (
-                      <tr key={i}>
-                        <td><strong>{p.symbol}</strong></td>
-                        <td>{p.side === 'BUY' ? 'Long' : 'Short'}</td>
-                        <td>{parseFloat(p.entryPrice).toFixed(6)}</td>
-                        <td>{parseFloat(p.closePrice).toFixed(6)}</td>
-                        <td>{parseFloat(p.qty).toFixed(4)}</td>
-                        <td className={p.realizedPNL >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                          {parseFloat(p.realizedPNL).toFixed(4)}
-                        </td>
-                        <td>{new Date(p.closeTime).toLocaleString()}</td>
-                      </tr>
-                    ))
-                  )}
+                  {paginatedTrades.map((p, i) => (
+                    <tr key={i}>
+                      <td>{new Date(p.closeTime).toLocaleString()}</td>
+                      <td>{p.symbol}</td>
+                      <td>{p.side}</td>
+                      <td>{parseFloat(p.entryPrice).toFixed(6)}</td>
+                      <td>{parseFloat(p.closePrice).toFixed(6)}</td>
+                      <td>{parseFloat(p.qty).toFixed(4)}</td>
+                      <td className={p.realizedPNL >= 0 ? 'pnl-positive' : 'pnl-negative'}>
+                        {parseFloat(p.realizedPNL).toFixed(4)}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
 
@@ -342,7 +354,7 @@
                   </button>
                   <span>
                     Page {currentPage} of {totalPages} 
-                    {' | '} Showing {startIdx + 1}-{Math.min(startIdx + PAGE_SIZE, filteredTrades.length)} of {filteredTrades.length} trades
+                    {' | '} Showing {startIdx + 1}-{Math.min(startIdx + PAGE_SIZE, trades.length)} of {trades.length} trades
                   </span>
                   <button 
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
