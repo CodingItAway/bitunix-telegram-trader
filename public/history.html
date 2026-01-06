@@ -155,11 +155,12 @@
       const [sortField, setSortField] = useState('closeTime');
       const [sortDir, setSortDir] = useState('desc');
       const [currentPage, setCurrentPage] = useState(1);
+      const [chartInstance, setChartInstance] = useState(null);
 
       useEffect(() => {
         async function fetchData() {
           try {
-            const res = await fetch('/history-data'); // ← Your existing route
+            const res = await fetch('/history-data');
             if (!res.ok) throw new Error('Failed to fetch history');
             const json = await res.json();
             setData(json);
@@ -174,55 +175,64 @@
         return () => clearInterval(interval);
       }, []);
 
-      if (loading) return <div className="container"><h1>Loading history...</h1></div>;
-      if (error) return <div className="container"><h1>Error: {error}</h1></div>;
-      if (!data.enabled) return <div className="container"><h1>History tracking is disabled</h1></div>;
+      // Build equity curve
+      const buildCurve = (data) => {
+        if (!data || !data.closedPositions) return [];
 
-      // === BUILD CURVE WITH LIVE FINAL POINT ===
-      const curve = [];
-      let runningEquity = data.initialBalance;
+        const curve = [];
+        let runningEquity = data.initialBalance || 0;
 
-      curve.push({
-        timestamp: new Date(data.featureEnabledAt).getTime(),
-        equity: runningEquity,
-        label: 'Start'
-      });
-
-      for (const pos of data.closedPositions) {
-        runningEquity += pos.realizedPNL;
         curve.push({
-          timestamp: pos.closeTime,
+          timestamp: new Date(data.featureEnabledAt || Date.now()).getTime(),
           equity: runningEquity,
-          label: `${pos.symbol} ${pos.side} PNL: ${pos.realizedPNL.toFixed(4)}`
+          label: 'Start'
         });
-      }
 
-      const liveEquity = data.currentEquity || runningEquity; // use your existing field
-      curve.push({
-        timestamp: Date.now(),
-        equity: liveEquity,
-        label: 'Live Balance (incl. unrealized)'
-      });
+        for (const pos of data.closedPositions) {
+          runningEquity += pos.realizedPNL || 0;
+          curve.push({
+            timestamp: pos.closeTime || Date.now(),
+            equity: runningEquity,
+            label: `${pos.symbol} ${pos.side} PNL: ${pos.realizedPNL?.toFixed(4) || 0}`
+          });
+        }
 
-      curve.sort((a, b) => a.timestamp - b.timestamp);
+        const liveEquity = data.currentEquity || data.liveEquity || runningEquity;
+        curve.push({
+          timestamp: Date.now(),
+          equity: liveEquity,
+          label: 'Live Balance (incl. unrealized)'
+        });
 
-      const chartData = {
-        labels: curve.map(p => new Date(p.timestamp).toLocaleDateString()),
-        datasets: [{
-          label: 'Equity Curve (USDT)',
-          data: curve.map(p => p.equity),
-          borderColor: '#4299e1',
-          backgroundColor: 'rgba(66, 153, 225, 0.1)',
-          tension: 0.4,
-          fill: true
-        }]
+        return curve.sort((a, b) => a.timestamp - b.timestamp);
       };
 
+      // Update chart when data changes
       useEffect(() => {
-        const ctx = document.getElementById('equityChart').getContext('2d');
-        const chart = new Chart(ctx, {
+        if (!data || loading || error) return;
+
+        const curve = buildCurve(data);
+
+        const ctx = document.getElementById('equityChart')?.getContext('2d');
+        if (!ctx) return;
+
+        if (chartInstance) {
+          chartInstance.destroy();
+        }
+
+        const newChart = new Chart(ctx, {
           type: 'line',
-          data: chartData,
+          data: {
+            labels: curve.map(p => new Date(p.timestamp).toLocaleDateString()),
+            datasets: [{
+              label: 'Equity Curve (USDT)',
+              data: curve.map(p => p.equity),
+              borderColor: '#4299e1',
+              backgroundColor: 'rgba(66, 153, 225, 0.1)',
+              tension: 0.4,
+              fill: true
+            }]
+          },
           options: {
             responsive: true,
             plugins: {
@@ -238,15 +248,29 @@
             }
           }
         });
-        return () => chart.destroy();
-      }, [chartData]);
+
+        setChartInstance(newChart);
+
+        return () => {
+          if (newChart) newChart.destroy();
+        };
+      }, [data, loading, error]);
+
+      if (loading) return <div className="container"><h1>Loading history...</h1></div>;
+      if (error) return <div className="container"><h1>Error: {error}</h1></div>;
+      if (!data?.enabled) return <div className="container"><h1>History tracking is disabled</h1></div>;
+
+      const curve = buildCurve(data);
+      const liveEquity = data.currentEquity || data.liveEquity || data.initialBalance || 0;
+      const positionMargin = data.positionMargin || 0;
+      const marginPct = liveEquity > 0 ? (positionMargin / liveEquity * 100) : 0;
 
       // Filter & sort trades
       let trades = data.closedPositions || [];
       if (searchTerm) {
         trades = trades.filter(t => 
-          t.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          t.side.toLowerCase().includes(searchTerm.toLowerCase())
+          t.symbol?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          t.side?.toLowerCase().includes(searchTerm.toLowerCase())
         );
       }
 
@@ -261,18 +285,13 @@
       const startIdx = (currentPage - 1) * PAGE_SIZE;
       const paginatedTrades = trades.slice(startIdx, startIdx + PAGE_SIZE);
 
-      // Margin usage (fallback to 0 if no positionMargin)
-      const positionMargin = data.positionMargin || 0;
-      const equity = liveEquity;
-      const marginPct = equity > 0 ? (positionMargin / equity * 100) : 0;
-
       return (
         <div className="container">
           <h1>Bitunix History & Equity Curve</h1>
           
           <div className="status">
-            Tracking since {new Date(data.featureEnabledAt).toLocaleString()} 
-            | Start: ${data.initialBalance.toFixed(2)} 
+            Tracking since {new Date(data.featureEnabledAt || Date.now()).toLocaleString()} 
+            | Start: ${data.initialBalance?.toFixed(2) || '0.00'} 
             | Current: <strong>${liveEquity.toFixed(2)}</strong> (live)
           </div>
 
@@ -280,7 +299,7 @@
           <div className="margin-usage-bar">
             <div className="label">
               Margin Usage: <strong>{marginPct.toFixed(1)}%</strong> 
-              (${positionMargin.toFixed(2)} / ${equity.toFixed(2)} USDT)
+              (${positionMargin.toFixed(2)} / ${liveEquity.toFixed(2)} USDT)
             </div>
             <div className="bar-container">
               <div className="bar-fill" style={{ width: `${Math.min(marginPct, 100)}%` }}></div>
