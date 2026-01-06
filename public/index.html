@@ -255,7 +255,7 @@
                       <td>{p.direction || '-'}</td>
                       <td>{p.avgEntryPrice ? Number(p.avgEntryPrice).toFixed(4) : '0.0000'}</td>
                       <td>{p.totalQty ? Number(p.totalQty).toFixed(4) : '0.0000'}</td>
-                      <td>{p.sl ? Number(p.sl).toFixed(2) : '-'}</td>
+                      <td>{p.sl ? Number(p.sl).toFixed(8) : '-'}</td>
                       <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
                       <td>{p.status || 'open'}</td>
                       <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
