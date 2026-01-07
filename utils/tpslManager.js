@@ -106,5 +106,3 @@ async function placeNextTpLevel(master, apiPos) {  // ← Add apiPos parameter
 }
 
 module.exports = { placeNextTpLevel };
-
-module.exports = { placeNextTpLevel };

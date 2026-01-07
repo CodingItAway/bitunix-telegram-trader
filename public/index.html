@@ -126,6 +126,7 @@
     function App() {
       const [positions, setPositions] = useState([]);
       const [status, setStatus] = useState('Loading positions...');
+      const [tpSlDisabled, setTpSlDisabled] = useState(false);
       const socket = io();
 
       async function fetchPositions() {
@@ -182,9 +183,35 @@
         }
       }
 
+      async function toggleTpSl(e) {
+        const disabled = !e.target.checked;
+        setTpSlDisabled(disabled);
+
+        try {
+          await fetch('/toggle-tp-sl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ disabled })
+          });
+          setStatus(disabled ? 'TP/SL management disabled — manual closure only' : 'TP/SL management enabled');
+        } catch (err) {
+          alert('Failed to toggle TP/SL');
+          e.target.checked = !disabled;
+        }
+      }
+
       useEffect(() => {
         fetchPositions();
         loadHistoryToggleState();
+
+        // Load TP/SL toggle state
+        fetch('/tp-sl-status')
+          .then(r => r.json())
+          .then(d => {
+            setTpSlDisabled(d.disabled);
+            const toggle = document.getElementById('tp-sl-toggle');
+            if (toggle) toggle.checked = !d.disabled;
+          });
 
         socket.on('positions', (data) => {
           setPositions(data);
@@ -209,6 +236,16 @@
                 onChange={toggleHistoryTracking}
               />
               {' '}Enable History Tracking & Equity Curve
+            </label>
+
+            <label>
+              <input
+                type="checkbox"
+                id="tp-sl-toggle"
+                onChange={toggleTpSl}
+                checked={!tpSlDisabled}
+              />
+              {' '}Enable TP/SL Management (disable for manual closure only)
             </label>
 
             <div className="button-group">
@@ -254,7 +291,7 @@
                       <td>{p.direction || '-'}</td>
                       <td>{p.avgEntryPrice ? Number(p.avgEntryPrice).toFixed(4) : '0.0000'}</td>
                       <td>{p.totalQty ? Number(p.totalQty).toFixed(4) : '0.0000'}</td>
-                      <td>{p.sl ? Number(p.sl).toFixed(6) : '-'}</td>
+                      <td>{p.sl ? Number(p.sl) : '-'}</td>
                       <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
                       <td>{p.status || 'open'}</td>
                       <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>

@@ -16,6 +16,7 @@ const { batchClosePositions, closeAllPositions, closeRunningTrade } = require('.
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
+const { isTpSlDisabled, setTpSlDisabled } = require('./utils/configManager');
 
 const BASE_URL = 'https://fapi.bitunix.com';
 
@@ -115,6 +116,16 @@ app.get('/audit-data', async (req, res) => {
 
 app.get('/audit', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'audit.html'));
+});
+
+app.post('/toggle-tp-sl', async (req, res) => {
+  const { disabled } = req.body;
+  await setTpSlDisabled(disabled);
+  res.json({ success: true, disabled: isTpSlDisabled() });
+});
+
+app.get('/tp-sl-status', async (req, res) => {
+  res.json({ disabled: isTpSlDisabled() });
 });
 
 

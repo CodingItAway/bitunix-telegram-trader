@@ -5,6 +5,7 @@ const { getPendingOrders } = require('./utils/getPendingOrders');
 const { placeNextTpLevel } = require('./utils/tpslManager');
 const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
 const { updateHistory } = require('./utils/historyManager');
+const { isTpSlDisabled } = require('./utils/configManager');
 require('dotenv').config();
 
 const client = new BitunixClient(process.env.BITUNIX_API_KEY, process.env.BITUNIX_API_SECRET);
@@ -162,6 +163,7 @@ console.log(`🧹 [CLEANUP] No stale entry orders to cancel`);
     }
 
 // === BOMB MODE: RE-PLACE ALL TP LEVELS EVERY CYCLE ===
+if (!isTpSlDisabled()) {
 if (master.status === 'open' && master.originalTargets) {
 for (let tpIndex = 0; tpIndex < master.originalTargets.length; tpIndex++) {
   const tpPrice = master.originalTargets[tpIndex];
@@ -196,6 +198,7 @@ for (let tpIndex = 0; tpIndex < master.originalTargets.length; tpIndex++) {
   }
 }
 }
+}
     // === DETECT DCA FILL VIA PENDING ENTRY COUNT DROP ===
 const currentPendingCount = pendingEntries.length;
 const previousPendingCount = master.pendingEntryCount ?? currentPendingCount;
@@ -227,6 +230,7 @@ console.log(`🔄 [LADDER REBUILD] Refreshing full TP ladder + SL for new total 
 master.pendingEntryCount = currentPendingCount;
 
     // === PLACE STOP LOSS (self-contained) ===
+    if (!isTpSlDisabled()) {
     if (!master.slPlaced && master.currentQty > 0 && positionId) {
       console.log(`[MANAGER] Placing Stop Loss @ ${master.sl} for ${master.currentQty} contracts`);
 
@@ -273,6 +277,7 @@ master.pendingEntryCount = currentPendingCount;
         console.error(`❌ [MANAGER] SL placement failed: ${e.message}`);
       }
     }
+  }
 
   } catch (assetError) {
     console.error(`[MANAGER] Error processing ${master.symbol} ${master.direction} — skipping to next asset:`, assetError.message);
