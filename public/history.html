@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bitunix History & Equity Curve</title>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -108,11 +109,12 @@
     }
   </style>
 </head>
+
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     const PAGE_SIZE = 20;
 
@@ -133,6 +135,9 @@
       const [dateRangeDays, setDateRangeDays] = useState(7);
       const [chart, setChart] = useState(null);
       const [liveCurrentEquity, setLiveCurrentEquity] = useState(0);
+
+      // 🔑 NEW: track real filter changes
+      const filtersChangedRef = useRef(false);
 
       const loadHistory = async () => {
         try {
@@ -168,75 +173,69 @@
         };
       }, []);
 
-      // Apply filters and sort newest first
+      // Apply filters
       useEffect(() => {
         if (!data.closedPositions) return;
 
-        let trades = [...data.closedPositions]; // copy
+        let trades = [...data.closedPositions];
 
-        // Date filter
         if (dateRangeDays > 0) {
           const cutoff = Date.now() - (dateRangeDays * 24 * 60 * 60 * 1000);
           trades = trades.filter(t => t.closeTime >= cutoff);
         }
 
-        // Symbol filter
         if (symbolFilter) {
           trades = trades.filter(t => t.symbol.toLowerCase().includes(symbolFilter.toLowerCase()));
         }
 
-        // Side filter
         if (sideFilter !== 'ALL') {
           trades = trades.filter(t => t.side === sideFilter);
         }
 
-        // SORT BY NEWEST FIRST
         trades.sort((a, b) => b.closeTime - a.closeTime);
-
         setFilteredTrades(trades);
-        setCurrentPage(1);
+
+        // ✅ ONLY reset page if user changed filters
+        if (filtersChangedRef.current) {
+          setCurrentPage(1);
+          filtersChangedRef.current = false;
+        }
       }, [data.closedPositions, symbolFilter, sideFilter, dateRangeDays]);
 
       useEffect(() => {
-  if (!data.enabled || data.curve.length === 0) return;
+        if (!data.enabled || data.curve.length === 0) return;
 
-  const ctx = document.getElementById('equityChart').getContext('2d');
-  if (chart) chart.destroy();
+        const ctx = document.getElementById('equityChart').getContext('2d');
+        if (chart) chart.destroy();
 
-  // === BUILD CURVE WITH LIVE FINAL POINT ===
-  const curvePoints = [...data.curve];
+        const curvePoints = [...data.curve];
+        if (liveCurrentEquity > 0) {
+          curvePoints.push({ timestamp: Date.now(), equity: liveCurrentEquity });
+        }
 
-  // Append live equity as the final point if available
-  if (liveCurrentEquity > 0) {
-    curvePoints.push({
-      timestamp: Date.now(),
-      equity: liveCurrentEquity
-    });
-  }
+        const newChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: curvePoints.map(p => new Date(p.timestamp).toLocaleString()),
+            datasets: [{
+              label: 'Equity Curve (USDT)',
+              data: curvePoints.map(p => parseFloat(p.equity.toFixed(2))),
+              borderColor: '#4299e1',
+              backgroundColor: 'rgba(66,153,225,0.1)',
+              fill: true,
+              tension: 0.2,
+              pointRadius: 3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: false } }
+          }
+        });
 
-  const newChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: curvePoints.map(p => new Date(p.timestamp).toLocaleString()),
-      datasets: [{
-        label: 'Equity Curve (USDT)',
-        data: curvePoints.map(p => parseFloat(p.equity.toFixed(2))),
-        borderColor: '#4299e1',
-        backgroundColor: 'rgba(66, 153, 225, 0.1)',
-        fill: true,
-        tension: 0.2,
-        pointRadius: 3
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: { y: { beginAtZero: false } },
-      plugins: { legend: { display: true } }
-    }
-  });
-  setChart(newChart);
-}, [data.curve, data.enabled, liveCurrentEquity]);
+        setChart(newChart);
+      }, [data.curve, data.enabled, liveCurrentEquity]);
 
       const totalPages = Math.ceil(filteredTrades.length / PAGE_SIZE);
       const startIdx = (currentPage - 1) * PAGE_SIZE;
@@ -247,119 +246,96 @@
       return (
         <div className="container">
           <h1>Bitunix History & Equity Curve</h1>
-          <div style={{ textAlign: 'left', marginBottom: '20px' }}>
-            <button
-              onClick={() => window.location.href = '/'}
-              style={{
-                padding: '10px 20px',
-                fontSize: '1.1em',
-                background: '#718096',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              ← Back to Dashboard
-            </button>
+
+          <div className="status">
+            Start: ${data.initialBalance.toFixed(2)} | Current: <strong>${displayEquity.toFixed(2)}</strong>
           </div>
 
-          {!data.enabled ? (
-            <div className="status">History tracking is disabled. Enable it from the main dashboard.</div>
-          ) : (
-            <>
-              <div className="status">
-                Tracking since {new Date(data.curve[0]?.timestamp).toLocaleString()} 
-                {' | '} Start: ${parseFloat(data.initialBalance).toFixed(2)} 
-                {' | '} Current: <strong>${displayEquity.toFixed(2)}</strong> (live)
-              </div>
+          <div id="chartContainer">
+            <canvas id="equityChart"></canvas>
+          </div>
 
-              <div id="chartContainer">
-                <canvas id="equityChart"></canvas>
-              </div>
+          <div className="filters">
+            <select
+              value={dateRangeDays}
+              onChange={(e) => {
+                filtersChangedRef.current = true;
+                setDateRangeDays(Number(e.target.value));
+              }}
+            >
+              {Object.entries(DATE_RANGES).map(([d, label]) => (
+                <option key={d} value={d}>{label}</option>
+              ))}
+            </select>
 
-              <div className="filters">
-                <select value={dateRangeDays} onChange={(e) => setDateRangeDays(Number(e.target.value))}>
-                  {Object.entries(DATE_RANGES).map(([days, label]) => (
-                    <option key={days} value={days}>{label}</option>
-                  ))}
-                </select>
+            <input
+              type="text"
+              placeholder="Search symbol..."
+              value={symbolFilter}
+              onChange={(e) => {
+                filtersChangedRef.current = true;
+                setSymbolFilter(e.target.value);
+              }}
+            />
 
-                <input
-                  type="text"
-                  placeholder="Search symbol..."
-                  value={symbolFilter}
-                  onChange={(e) => setSymbolFilter(e.target.value)}
-                />
+            <select
+              value={sideFilter}
+              onChange={(e) => {
+                filtersChangedRef.current = true;
+                setSideFilter(e.target.value);
+              }}
+            >
+              <option value="ALL">All Sides</option>
+              <option value="BUY">Long Only</option>
+              <option value="SELL">Short Only</option>
+            </select>
+          </div>
 
-                <select value={sideFilter} onChange={(e) => setSideFilter(e.target.value)}>
-                  <option value="ALL">All Sides</option>
-                  <option value="BUY">Long Only</option>
-                  <option value="SELL">Short Only</option>
-                </select>
-              </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>Qty</th>
+                <th>PNL</th>
+                <th>Close Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedTrades.map((p, i) => (
+                <tr key={i}>
+                  <td>{p.symbol}</td>
+                  <td>{p.side}</td>
+                  <td>{Number(p.entryPrice).toFixed(6)}</td>
+                  <td>{Number(p.closePrice).toFixed(6)}</td>
+                  <td>{Number(p.qty).toFixed(4)}</td>
+                  <td className={p.realizedPNL >= 0 ? 'pnl-positive' : 'pnl-negative'}>
+                    {Number(p.realizedPNL).toFixed(4)}
+                  </td>
+                  <td>{new Date(p.closeTime).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-              <table>
-                <thead>
-                  <tr>
-                    <th>Symbol</th>
-                    <th>Side</th>
-                    <th>Entry Price</th>
-                    <th>Exit Price</th>
-                    <th>Qty</th>
-                    <th>Realized PNL</th>
-                    <th>Close Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedTrades.length === 0 ? (
-                    <tr><td colSpan="7" style={{textAlign: 'center', padding: '40px'}}>No trades found</td></tr>
-                  ) : (
-                    paginatedTrades.map((p, i) => (
-                      <tr key={i}>
-                        <td><strong>{p.symbol}</strong></td>
-                        <td>{p.side === 'BUY' ? 'Long' : 'Short'}</td>
-                        <td>{parseFloat(p.entryPrice).toFixed(6)}</td>
-                        <td>{parseFloat(p.closePrice).toFixed(6)}</td>
-                        <td>{parseFloat(p.qty).toFixed(4)}</td>
-                        <td className={p.realizedPNL >= 0 ? 'pnl-positive' : 'pnl-negative'}>
-                          {parseFloat(p.realizedPNL).toFixed(4)}
-                        </td>
-                        <td>{new Date(p.closeTime).toLocaleString()}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-
-              {totalPages > 1 && (
-                <div className="pagination">
-                  <button 
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </button>
-                  <span>
-                    Page {currentPage} of {totalPages} 
-                    {' | '} Showing {startIdx + 1}-{Math.min(startIdx + PAGE_SIZE, filteredTrades.length)} of {filteredTrades.length} trades
-                  </span>
-                  <button 
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </>
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                Previous
+              </button>
+              <span>Page {currentPage} of {totalPages}</span>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                Next
+              </button>
+            </div>
           )}
         </div>
       );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
