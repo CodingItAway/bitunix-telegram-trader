@@ -117,7 +117,7 @@ async function managePositions() {
 const { sendJoinNotification } = require('./utils/joinNotification');
 await sendJoinNotification(
   `Trade Closed`,
-  '${master.symbol}'
+  `${master.symbol}`
 );
 
   // === CANCEL STALE ENTRY ORDERS ===
