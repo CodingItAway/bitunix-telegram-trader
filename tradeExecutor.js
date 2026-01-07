@@ -30,22 +30,6 @@ async function executeTrade(signal) {
   try {
     const { symbol, direction, entries, targets, sl } = signal;
 
-    // === DYNAMIC LEVERAGE CALCULATION ===
-const plannedAvgEntry = entries.reduce((a, b) => a + b, 0) / entries.length;
-const slDistancePct = Math.abs(plannedAvgEntry - sl) / plannedAvgEntry;
-
-let leverage = Math.floor(1 / (slDistancePct));
-
-// Bump +1 if low risk
-if (riskLevel.toLowerCase() === 'low') {
-  leverage += 1;
-}
-
-// Caps
-leverage = Math.max(11, Math.min(leverage, 20));
-
-console.log(`[DYNAMIC LEVERAGE] Avg entry: ${plannedAvgEntry.toFixed(6)} | SL distance: ${(slDistancePct*100).toFixed(2)}% | Risk: ${riskLevel} → Using ${leverage}x`);
-
 // === FETCH LIVE RISK FROM MRD_ACTIVE_SIGNALS.JSON (READ-ONLY MIRROR) ===
 let actualRiskLevel = 'medium'; // safe fallback
 
@@ -101,6 +85,22 @@ try {
       console.log('Invalid signal — skipping');
       return;
     }
+
+    // === DYNAMIC LEVERAGE CALCULATION ===
+      const plannedAvgEntry = entries.reduce((a, b) => a + b, 0) / entries.length;
+      const slDistancePct = Math.abs(plannedAvgEntry - sl) / plannedAvgEntry;
+
+      let leverage = Math.floor(1 / (slDistancePct));
+
+      // Bump +1 if low risk
+      if (actualRiskLevel.toLowerCase() === 'low') {
+        leverage += 1;
+      }
+
+      // Caps
+      leverage = Math.max(11, Math.min(leverage, 20));
+
+console.log(`[DYNAMIC LEVERAGE] Avg entry: ${plannedAvgEntry.toFixed(6)} | SL distance: ${(slDistancePct*100).toFixed(2)}% | Risk: ${actualRiskLevel} → Using ${leverage}x`);
 
     // === DYNAMIC SIZING ===
     let sizeResult;
