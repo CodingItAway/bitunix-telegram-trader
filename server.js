@@ -73,9 +73,31 @@ app.post('/toggle-history', async (req, res) => {
 // Serve history data for chart & table
 app.get('/history-data', async (req, res) => {
   try {
-    const data = await getEquityCurve();
-    res.json(data);
+    // Get historical curve data (your existing function)
+    const historyData = await getEquityCurve();
+
+    // Get real-time account info from Bitunix
+    const accountInfo = await getAccountInfo(); // your working function from getAccountBalance.js
+
+    if (!accountInfo) {
+      return res.status(500).json({ error: 'Failed to fetch account info' });
+    }
+
+    // Extract real values
+    const usedMargin = parseFloat(accountInfo.usedMargin || accountInfo.margin || 0);
+    const totalEquity = accountInfo.totalEquity;
+
+    // Send everything the frontend needs
+    res.json({
+      ...historyData,
+      currentEquity: totalEquity,
+      usedMargin: usedMargin,
+      availableBalance: accountInfo.availableBalance || 0,
+      unrealizedPnl: accountInfo.unrealizedPnl || 0
+    });
+
   } catch (err) {
+    console.error('[history-data] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
