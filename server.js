@@ -77,7 +77,7 @@ app.get('/history-data', async (req, res) => {
     const historyData = await getEquityCurve();
 
     // Get real-time account info from Bitunix
-    const accountInfo = await getAccountInfo(); // your working function from getAccountBalance.js
+    const accountInfo = await getCurrentEquity(); // your working function from getAccountBalance.js
 
     if (!accountInfo) {
       return res.status(500).json({ error: 'Failed to fetch account info' });
