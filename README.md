@@ -106,7 +106,6 @@ text├── server.js                  # Express + Socket.IO server, symbol re
 │   ├── mrdParser.js           # Parses mrD popup signals + risk detection
 │   ├── openNewPositions.js    # Bitunix API client
 │   ├── getAccountBalance.js   # Accurate equity fetch
-│   ├── getOpenPositions.js
 │   ├── getPendingOrders.js
 │   ├── tpslManager.js         # TP/SL placement
 │   ├── symbolValidator.js

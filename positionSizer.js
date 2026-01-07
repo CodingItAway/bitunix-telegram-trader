@@ -1,8 +1,8 @@
 // positionSizer.js - Fixed import + Enhanced logging for debugging
 
 const { getCurrentEquity } = require('./utils/getAccountBalance');
-const { getOpenPositions } = require('./utils/getOpenPositions');
 const { logSignal } = require('./utils/signalAuditor');
+const { loadPositions } = require('../storage/googleDriveStorage');
 
 async function calculatePositionSize(signal) {
   console.log(`\n[POSITION SIZER] Starting sizing calculation for ${signal.symbol} ${signal.direction}`);
@@ -25,24 +25,16 @@ async function calculatePositionSize(signal) {
   }
 
   console.log('[POSITION SIZER] Fetching open positions...');
-  const positions = await getOpenPositions();
-  const openCount = positions.length;
+  const positions = await loadPositions();
+  const openCount = positions.filter(p => p.isMaster && p.status === 'open').length;
   console.log(`[POSITION SIZER] Found ${openCount} open position(s)`);
 
   // === CALCULATE USED MARGIN ===
-  let usedMargin = 0;
-  console.log('[POSITION SIZER] Calculating used margin from open positions...');
-  for (const pos of positions) {
-    const margin = parseFloat(
-      pos.margin ||                  
-      pos.initialMargin || 
-      pos.positionInitialMargin ||
-      pos.usedMargin ||
-      0
-    );
-    usedMargin += margin;
-    console.log(`   → Position ${pos.symbol} ${pos.side}: margin fields → margin:${pos.margin}, initialMargin:${pos.initialMargin}, usedMargin:${pos.usedMargin} → using ${margin.toFixed(6)}`);
-  }
+
+  const account = await signedGet('/api/v1/futures/account', { marginCoin: 'USDT' });
+  let usedMargin = parseFloat(account.margin || 0);
+
+  console.log(`   → Position ${pos.symbol} ${pos.side}: margin fields → margin:${pos.margin}, initialMargin:${pos.initialMargin}, usedMargin:${pos.usedMargin} → using ${margin.toFixed(6)}`);
   console.log(`[POSITION SIZER] Total used margin: $${usedMargin.toFixed(2)} USDT`);
 
   const usedMarginPercent = (parseFloat(usedMargin || 0) / currentEquity) * 100;

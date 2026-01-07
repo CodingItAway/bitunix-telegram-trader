@@ -2,7 +2,6 @@
 
 const BitunixClient = require('./utils/openNewPositions');
 const { getPendingOrders } = require('./utils/getPendingOrders');
-const { getOpenPositions } = require('./utils/getOpenPositions');
 const { placeNextTpLevel } = require('./utils/tpslManager');
 const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
 const { updateHistory } = require('./utils/historyManager');
@@ -20,10 +19,9 @@ async function managePositions() {
 
   try {
     // Fetch live data
-    const apiPositions = await getOpenPositions();
     const apiPendingOrders = await getPendingOrders();
 
-    console.log(`[MANAGER] Fetched ${apiPositions.length} open positions and ${apiPendingOrders.length} pending orders from Bitunix`);
+    console.log(`[MANAGER] Fetched ${apiPendingOrders.length} pending orders from Bitunix`);
 
     let tracked = await loadPositions();
     tracked = tracked.filter(p => p.isMaster);

@@ -17,7 +17,7 @@ async function signedPost(path, bodyParams) {
   const queryString = ''; // No query params for POST
   const bodyStr = JSON.stringify(bodyParams);
 
-  // Same signing logic as getOpenPositions / getPendingOrders
+  // Same signing logic as getPendingOrders
   const digestInput = nonce + timestamp + API_KEY + queryString + bodyStr;
   const digest = CryptoJS.SHA256(digestInput).toString();
   const sign = CryptoJS.SHA256(digest + API_SECRET).toString();
