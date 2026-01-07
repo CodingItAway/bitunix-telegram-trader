@@ -1,177 +1,84 @@
-// utils/closeRunningTrade.js - FINAL VERSION with all functions (Bitunix-compatible)
+// utils/closeRunningTrade.js - FINAL: No fallback, only bot-managed trades using stored positionId
 
 require('dotenv').config();
-const fetch = require('node-fetch');
-const CryptoJS = require('crypto-js');
-const { loadHistory, saveHistory } = require('../storage/googleDriveStorage');
+const { loadPositions } = require('../storage/googleDriveStorage');
+
 const API_BASE = 'https://fapi.bitunix.com';
 const API_KEY = process.env.BITUNIX_API_KEY;
 const API_SECRET = process.env.BITUNIX_API_SECRET;
 
-async function signedPost(endpoint, bodyParams = {}) {
-  const timestamp = Date.now().toString();
-  const nonce = CryptoJS.lib.WordArray.random(16).toString();
-
-  const bodyStr = JSON.stringify(bodyParams);
-
-  const digestInput = nonce + timestamp + API_KEY + '' + bodyStr;
-  const digest = CryptoJS.SHA256(digestInput).toString();
-  const sign = CryptoJS.SHA256(digest + API_SECRET).toString();
-
-  const url = API_BASE + endpoint;
-
-  const headers = {
-    'api-key': API_KEY,
-    'nonce': nonce,
-    'timestamp': timestamp,
-    'sign': sign,
-    'Content-Type': 'application/json',
-    'language': 'en-US'
-  };
-
-  try {
-    const response = await fetch(url, { method: 'POST', headers, body: bodyStr });
-    const data = await response.json();
-
-    if (data.code !== 0) {
-      console.error(`[CLOSE TRADE] API Error ${data.code}: ${data.msg || 'Unknown'}`);
-      throw new Error(data.msg || 'API error');
-    }
-
-    return data.data;
-  } catch (error) {
-    console.error(`[CLOSE TRADE] Request failed: ${error.message}`);
-    throw error;
-  }
-}
+const client = require('../utils/openNewPositions'); // your BitunixClient with flashClosePosition method
 
 /**
- * Close a single position (or all for a symbol)
+ * Close a single symbol using ONLY the local master record (no fallback)
  */
-async function closeRunningTrade(symbol, direction = null) { // direction: 'LONG' or 'SHORT' or null
-  console.log(`\n🔴 [CLOSE TRADE] Initiating market close for ${symbol}${direction ? ` (${direction})` : ''}`);
+async function closeRunningTrade(symbol) {
+  if (!symbol) {
+    return { success: false, message: 'Symbol required' };
+  }
 
-  if (!symbol) throw new Error('Symbol required');
+  console.log(`[CLOSE] Attempting to close ${symbol} (bot-managed only)`);
 
   try {
-    const { getOpenPositions } = require('./getOpenPositions');
-    const positions = await getOpenPositions();
+    // Load local positions — source of truth
+    const positions = await loadPositions();
+    const master = positions.find(p => p.isMaster && p.symbol === symbol && p.status === 'open');
 
-    const targetPositions = positions.filter(pos =>
-      pos.symbol === symbol &&
-      (!direction || pos.side === direction)
-    );
-
-    if (targetPositions.length === 0) {
-      console.log(`[CLOSE TRADE] No open positions found for ${symbol}`);
-      return { success: true, closedQty: 0, message: 'No positions to close' };
+    if (!master) {
+      return { success: false, message: `No bot-managed open position found for ${symbol}` };
     }
 
-    console.log(`[CLOSE TRADE] Found ${targetPositions.length} position(s) to close`);
-    let totalClosed = 0;
-    let results = [];
-
-    for (const pos of targetPositions) {
-      const qty = parseFloat(pos.qty || 0);
-      if (qty <= 0) continue;
-
-      const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
-
-      console.log(`   → Closing ${pos.side} ${pos.symbol} | Qty: ${qty} | Entry: ${pos.avgOpenPrice || 'N/A'}`);
-
-      const closeParams = {
-        symbol: pos.symbol,
-        side: closeSide,
-        qty: qty.toFixed(8).replace(/\.?0+$/, ''),
-        orderType: 'MARKET',
-        tradeSide: 'CLOSE',
-        reduceOnly: true,
-        effect: 'IOC'
-      };
-      // === RECORD API CLOSE INTENT ===
-        if (pos.positionId) {
-        const history = await loadHistory();
-
-        history.pendingCloseIntents[pos.positionId.toString()] = {
-          symbol: pos.symbol,
-          side: pos.side,
-          source: 'api_close',
-          timestamp: Date.now()
-        };
-
-        await saveHistory(history);
-      }
-
-      if (pos.positionId) closeParams.positionId = pos.positionId.toString();
-
-      try {
-        const result = await signedPost('/api/v1/futures/trade/place_order', closeParams);
-        console.log(`✅ Closed ${qty} contracts (Order ID: ${result.orderId || 'N/A'})`);
-        totalClosed += qty;
-        results.push({ status: 'success', qty });
-      } catch (err) {
-        console.error(`❌ Failed to close ${pos.side} ${pos.symbol}: ${err.message}`);
-        results.push({ status: 'failed', error: err.message });
-      }
+    if (!master.positionId) {
+      return { success: false, message: `No positionId stored for ${symbol}` };
     }
 
-    const allSuccess = results.every(r => r.status === 'success');
-    return {
-      success: allSuccess,
-      closedQty: totalClosed,
-      message: allSuccess
-        ? `Successfully closed ${totalClosed} contracts`
-        : `Closed ${totalClosed} contracts with some failures`
-    };
+    // Flash close using stored positionId — fastest and most reliable
+    await client.flashClosePosition({
+      positionId: master.positionId.toString()
+    });
+
+    console.log(`[CLOSE] Successfully flash closed ${symbol} using positionId ${master.positionId}`);
+    return { success: true, positionId: master.positionId, message: `Closed ${symbol}` };
 
   } catch (error) {
-    console.error(`[CLOSE TRADE] Fatal error: ${error.message}`);
-    return { success: false, closedQty: 0, message: error.message };
+    console.error(`[CLOSE] Failed to close ${symbol}: ${error.message}`);
+    return { success: false, message: error.message };
   }
 }
 
 /**
- * Emergency: Close ALL open positions across all symbols
+ * Close ALL bot-managed open positions
  */
 async function closeAllPositions() {
-  console.warn('\n🚨 [EMERGENCY CLOSE ALL] Closing EVERY open position on the account...');
+  console.log('[CLOSE ALL] Starting emergency close of all bot-managed positions');
 
   try {
-    const { getOpenPositions } = require('./getOpenPositions');
-    const positions = await getOpenPositions();
+    const positions = await loadPositions();
+    const openMasters = positions.filter(p => p.isMaster && p.status === 'open');
 
-    if (positions.length === 0) {
-      console.log('[CLOSE ALL] No open positions found');
-      return { success: true, closedQty: 0, message: 'No positions to close' };
+    if (openMasters.length === 0) {
+      return { success: true, closedQty: 0, message: 'No bot-managed positions to close' };
     }
-
-    console.log(`[CLOSE ALL] Found ${positions.length} open positions`);
 
     let totalClosed = 0;
-    let symbolResults = {};
+    const details = {};
 
-    // Group by symbol to avoid rate limits and log cleanly
-    const symbols = [...new Set(positions.map(p => p.symbol))];
-
-    for (const sym of symbols) {
-      console.log(`\n→ Closing all positions for ${sym}`);
-      const result = await closeRunningTrade(sym);
-      symbolResults[sym] = result;
-      if (result.success) totalClosed += result.closedQty;
-
-      // Small delay between symbols to be gentle on API
-      await new Promise(resolve => setTimeout(resolve, 300));
+    for (const master of openMasters) {
+      const result = await closeRunningTrade(master.symbol);
+      details[master.symbol] = result;
+      if (result.success) totalClosed++;
+      await new Promise(r => setTimeout(r, 200)); // rate safety
     }
 
-    const allSuccess = Object.values(symbolResults).every(r => r.success);
+    const allSuccess = totalClosed === openMasters.length;
 
     return {
       success: allSuccess,
       closedQty: totalClosed,
-      details: symbolResults,
+      details,
       message: allSuccess
-        ? `EMERGENCY CLOSE COMPLETE: ${totalClosed} contracts closed`
-        : `Emergency close partial: ${totalClosed} contracts closed`
+        ? `EMERGENCY CLOSE COMPLETE: ${totalClosed} positions closed`
+        : `Emergency close partial: ${totalClosed}/${openMasters.length} closed`
     };
 
   } catch (error) {
@@ -181,7 +88,7 @@ async function closeAllPositions() {
 }
 
 /**
- * Batch close multiple symbols
+ * Batch close multiple symbols (only bot-managed)
  */
 async function batchClosePositions(symbols) {
   if (!Array.isArray(symbols) || symbols.length === 0) {
@@ -194,7 +101,7 @@ async function batchClosePositions(symbols) {
   for (const sym of symbols) {
     const result = await closeRunningTrade(sym);
     results.push({ symbol: sym, ...result });
-    await new Promise(resolve => setTimeout(resolve, 300)); // rate limit safety
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 
   const successful = results.filter(r => r.success);
@@ -203,7 +110,6 @@ async function batchClosePositions(symbols) {
   return results;
 }
 
-// Export everything
 module.exports = {
   closeRunningTrade,
   closeAllPositions,
