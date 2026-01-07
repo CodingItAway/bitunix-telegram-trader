@@ -3,6 +3,7 @@
 const { getCurrentEquity } = require('./utils/getAccountBalance');
 const { logSignal } = require('./utils/signalAuditor');
 const { loadPositions } = require('./storage/googleDriveStorage');
+const CryptoJS = require('crypto-js');
 
 
 async function signedGet(endpoint, params = {}) {
