@@ -4,6 +4,52 @@ const { getCurrentEquity } = require('./utils/getAccountBalance');
 const { logSignal } = require('./utils/signalAuditor');
 const { loadPositions } = require('./storage/googleDriveStorage');
 
+
+async function signedGet(endpoint, params = {}) {
+  const timestamp = Date.now().toString();
+  const nonce = CryptoJS.lib.WordArray.random(16).toString();
+
+  // Sort params alphabetically (no = or ? in signature)
+  const sortedParams = Object.keys(params)
+    .sort()
+    .map(key => `${key}${params[key]}`)
+    .join('');
+
+  const queryString = new URLSearchParams(params).toString();
+  const queryParams = queryString ? '?' + queryString : '';
+
+  // Signature: nonce + timestamp + apiKey + sortedParams + body (empty)
+  const digestInput = nonce + timestamp + API_KEY + sortedParams;
+  const digest = CryptoJS.SHA256(digestInput).toString();
+  const sign = CryptoJS.SHA256(digest + API_SECRET).toString();
+
+  const url = API_BASE + endpoint + queryParams;
+
+  const headers = {
+    'api-key': API_KEY,
+    'nonce': nonce,
+    'timestamp': timestamp,
+    'sign': sign,
+    'Content-Type': 'application/json',
+    'language': 'en-US'
+  };
+
+  try {
+    const response = await fetch(url, { method: 'GET', headers });
+    const data = await response.json();
+
+    if (data.code !== 0) {
+      console.error('[getAccountBalance] API Error:', data.code, data.msg);
+      return null;
+    }
+
+    return data.data;
+  } catch (err) {
+    console.error('[getAccountBalance] Network error:', err.message);
+    return null;
+  }
+}
+
 async function calculatePositionSize(signal) {
   console.log(`\n[POSITION SIZER] Starting sizing calculation for ${signal.symbol} ${signal.direction}`);
   console.log(`[POSITION SIZER] Raw signal entries: ${signal.entries.join(', ')} | SL: ${signal.sl} | Targets count: ${signal.targets?.length || 0}`);
