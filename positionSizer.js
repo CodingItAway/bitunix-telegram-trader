@@ -2,7 +2,7 @@
 
 const { getCurrentEquity } = require('./utils/getAccountBalance');
 const { logSignal } = require('./utils/signalAuditor');
-const { loadPositions } = require('../storage/googleDriveStorage');
+const { loadPositions } = require('./storage/googleDriveStorage');
 
 async function calculatePositionSize(signal) {
   console.log(`\n[POSITION SIZER] Starting sizing calculation for ${signal.symbol} ${signal.direction}`);
