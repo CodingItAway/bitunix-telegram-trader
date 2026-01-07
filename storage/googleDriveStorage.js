@@ -186,8 +186,10 @@ async function loadHistory() {
       featureEnabledAt: parsedData.featureEnabledAt || null,
       initialBalance: parsedData.initialBalance || 0,
       closedPositions: parsedData.closedPositions || [],
-      lastHistoryCheckpoint: parsedData.lastHistoryCheckpoint || 0
+      lastHistoryCheckpoint: parsedData.lastHistoryCheckpoint || 0,
+      pendingCloseIntents: parsedData.pendingCloseIntents || {} // ← ADD
     };
+
   } catch (err) {
     console.error('Error loading history:', err.message);
     return { closedPositions: [], lastHistoryCheckpoint: 0 };

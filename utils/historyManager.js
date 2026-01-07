@@ -92,22 +92,34 @@ async function updateHistory() {
   if (newUnique.length > 0) {
     console.log(`[History] Found ${newUnique.length} new closed positions`);
 
-    newUnique.forEach(p => {
-      history.closedPositions.push({
-        positionId: p.positionId,
-        symbol: p.symbol,
-        side: p.side,
-        qty: parseFloat(p.qty),
-        entryPrice: parseFloat(p.entryPrice),
-        closePrice: parseFloat(p.closePrice),
-        realizedPNL: parseFloat(p.realizedPNL || p.realizedPnl || 0),
-        fee: parseFloat(p.fee || 0),
-        funding: parseFloat(p.funding || 0),
-        leverage: p.leverage,
-        closeTime: parseInt(p.mtime || p.ctime || 0),
-        closeReason: p.closeReason || 'Unknown'
-      });
-    });
+newUnique.forEach(p => {
+  const positionId = p.positionId?.toString();
+  let closeSource = 'manual_or_liquidated';
+
+  if (positionId && history.pendingCloseIntents?.[positionId]) {
+    closeSource = history.pendingCloseIntents[positionId].source;
+    delete history.pendingCloseIntents[positionId]; // cleanup
+  }
+
+  history.closedPositions.push({
+    positionId: p.positionId,
+    symbol: p.symbol,
+    side: p.side,
+    qty: parseFloat(p.qty),
+    entryPrice: parseFloat(p.entryPrice),
+    closePrice: parseFloat(p.closePrice),
+    realizedPNL: parseFloat(p.realizedPNL || p.realizedPnl || 0),
+    fee: parseFloat(p.fee || 0),
+    funding: parseFloat(p.funding || 0),
+    leverage: p.leverage,
+    closeTime: parseInt(p.mtime || p.ctime || 0),
+    closeReason: p.closeReason || 'Unknown',
+    closeSource // ← NEW FIELD
+  });
+});
+
+await saveHistory(history);
+
 
     // Sort by closeTime (oldest to newest)
     history.closedPositions.sort((a, b) => a.closeTime - b.closeTime);

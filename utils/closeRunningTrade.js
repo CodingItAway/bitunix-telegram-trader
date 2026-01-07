@@ -3,7 +3,7 @@
 require('dotenv').config();
 const fetch = require('node-fetch');
 const CryptoJS = require('crypto-js');
-
+const { loadHistory, saveHistory } = require('../storage/googleDriveStorage');
 const API_BASE = 'https://fapi.bitunix.com';
 const API_KEY = process.env.BITUNIX_API_KEY;
 const API_SECRET = process.env.BITUNIX_API_SECRET;
@@ -88,6 +88,19 @@ async function closeRunningTrade(symbol, direction = null) { // direction: 'LONG
         reduceOnly: true,
         effect: 'IOC'
       };
+      // === RECORD API CLOSE INTENT ===
+        if (pos.positionId) {
+        const history = await loadHistory();
+
+        history.pendingCloseIntents[pos.positionId.toString()] = {
+          symbol: pos.symbol,
+          side: pos.side,
+          source: 'api_close',
+          timestamp: Date.now()
+        };
+
+        await saveHistory(history);
+      }
 
       if (pos.positionId) closeParams.positionId = pos.positionId.toString();
 

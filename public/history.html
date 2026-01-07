@@ -300,6 +300,7 @@
                 <th>Exit</th>
                 <th>Qty</th>
                 <th>PNL</th>
+                <th>Close Type</th>
                 <th>Close Time</th>
               </tr>
             </thead>
@@ -313,6 +314,11 @@
                   <td>{Number(p.qty).toFixed(4)}</td>
                   <td className={p.realizedPNL >= 0 ? 'pnl-positive' : 'pnl-negative'}>
                     {Number(p.realizedPNL).toFixed(4)}
+                  </td>
+                  <td>
+                    {p.closeSource === 'api_close'
+                      ? 'API Close'
+                      : 'Manual / Liquidation'}
                   </td>
                   <td>{new Date(p.closeTime).toLocaleString()}</td>
                 </tr>

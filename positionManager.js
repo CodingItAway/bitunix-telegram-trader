@@ -107,6 +107,20 @@ async function managePositions() {
     }
 
     if (isTrulyClosed) {
+
+      const { loadHistory, saveHistory } = require('./storage/googleDriveStorage');
+      const history = await loadHistory();
+
+      if (positionId) {
+        history.pendingCloseIntents[positionId.toString()] = {
+          symbol: master.symbol,
+          side: master.direction,
+          source: 'manual_or_liquidated',
+          timestamp: Date.now()
+        };
+        await saveHistory(history);
+      }
+
       master.status = 'closed';
       master.closedAt = new Date().toISOString();
       console.log(`❌ [MANAGER] Position fully closed/canceled: ${master.symbol} ${master.direction} (no qty, no pending orders)`);
