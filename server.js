@@ -6,7 +6,6 @@ const http = require('http');
 const socketIo = require('socket.io');
 const axios = require('axios');
 const path = require('path');
-const { startTelegramListener } = require('./utils/telegramListener');
 const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
 const { enableHistoryTracking, disableHistoryTracking, getEquityCurve } = require('./utils/historyManager');
 require('./positionManager'); // Auto-starts manager with setInterval
@@ -312,8 +311,6 @@ refreshSymbols();
 // Daily refresh
 setInterval(refreshSymbols, 24 * 60 * 60 * 1000);
 
-// Start Telegram listener
-startTelegramListener();
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
