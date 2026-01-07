@@ -88,7 +88,6 @@ async function calculatePositionSize(signal) {
   const account = await signedGet('/api/v1/futures/account', { marginCoin: 'USDT' });
   let usedMargin = parseFloat(account.margin || 0);
 
-  console.log(`   → Position ${pos.symbol} ${pos.side}: margin fields → margin:${pos.margin}, initialMargin:${pos.initialMargin}, usedMargin:${pos.usedMargin} → using ${margin.toFixed(6)}`);
   console.log(`[POSITION SIZER] Total used margin: $${usedMargin.toFixed(2)} USDT`);
 
   const usedMarginPercent = (parseFloat(usedMargin || 0) / currentEquity) * 100;
