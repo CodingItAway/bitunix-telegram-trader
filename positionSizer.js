@@ -5,6 +5,13 @@ const { logSignal } = require('./utils/signalAuditor');
 const { loadPositions } = require('./storage/googleDriveStorage');
 const CryptoJS = require('crypto-js');
 
+const API_BASE = 'https://fapi.bitunix.com';
+const API_KEY = process.env.BITUNIX_API_KEY;
+const API_SECRET = process.env.BITUNIX_API_SECRET;
+
+if (!API_KEY || !API_SECRET) {
+  throw new Error('BITUNIX_API_KEY and BITUNIX_API_SECRET must be set in .env');
+}
 
 async function signedGet(endpoint, params = {}) {
   const timestamp = Date.now().toString();
