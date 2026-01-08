@@ -16,7 +16,6 @@ const { batchClosePositions, closeAllPositions, closeRunningTrade } = require('.
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
-const { isTpSlDisabled, setTpSlDisabled } = require('./utils/configManager');
 
 const BASE_URL = 'https://fapi.bitunix.com';
 
@@ -71,6 +70,24 @@ app.post('/toggle-history', async (req, res) => {
   }
 });
 
+// Remove old /toggle-tp-sl and /tp-sl-status
+
+// NEW: In-memory toggle
+app.post('/toggle-tp-sl', (req, res) => {
+  const { disabled } = req.body;
+  const { setTpSlDisabled } = require('./utils/tpSlControl');
+  setTpSlDisabled(disabled);
+  res.json({ 
+    success: true, 
+    disabled: require('./utils/tpSlControl').isTpSlDisabled()
+  });
+});
+
+app.get('/tp-sl-status', (req, res) => {
+  const { isTpSlDisabled } = require('./utils/tpSlControl');
+  res.json({ disabled: isTpSlDisabled() });
+});
+
 // Serve history data for chart & table
 app.get('/history-data', async (req, res) => {
   try {
@@ -118,15 +135,6 @@ app.get('/audit', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'audit.html'));
 });
 
-app.post('/toggle-tp-sl', async (req, res) => {
-  const { disabled } = req.body;
-  await setTpSlDisabled(disabled);
-  res.json({ success: true, disabled: isTpSlDisabled() });
-});
-
-app.get('/tp-sl-status', async (req, res) => {
-  res.json({ disabled: isTpSlDisabled() });
-});
 
 
 // In server.js (replace your current /api/mrd-signal)

@@ -74,6 +74,7 @@
       margin-top: 30px;
       font-size: 1.2em;
       color: #4a5568;
+      min-height: 28px;
     }
     .toggle-section {
       text-align: center;
@@ -125,8 +126,8 @@
 
     function App() {
       const [positions, setPositions] = useState([]);
-      const [status, setStatus] = useState('Loading positions...');
-      const [tpSlDisabled, setTpSlDisabled] = useState(false);
+      const [status, setStatus] = useState('Loading dashboard...');
+      const [tpSlDisabled, setTpSlDisabled] = useState(true); // Default: disabled
       const socket = io();
 
       async function fetchPositions() {
@@ -134,36 +135,30 @@
           const res = await fetch('/positions');
           const data = await res.json();
           setPositions(data);
-          setStatus(data.length === 0 ? 'No active positions' : 'Positions loaded');
+          setStatus(data.length === 0 ? 'No active positions' : `${data.length} position(s) active`);
         } catch (err) {
           setStatus('Error loading positions');
-          console.error(err);
+          console.error('Fetch positions error:', err);
         }
       }
 
       async function deletePosition(index) {
-        if (!confirm('Delete this closed position from records?')) return;
+        if (!confirm('Permanently delete this closed position from records?')) return;
         try {
-          await fetch('/delete-position', {
+          const res = await fetch('/delete-position', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ index })
           });
-          fetchPositions();
+          if (res.ok) {
+            fetchPositions();
+            setStatus('Closed position deleted');
+          } else {
+            alert('Failed to delete position');
+          }
         } catch (err) {
           alert('Failed to delete position');
           console.error(err);
-        }
-      }
-
-      async function loadHistoryToggleState() {
-        try {
-          const res = await fetch('/history-data');
-          const data = await res.json();
-          const toggle = document.getElementById('history-toggle');
-          if (toggle) toggle.checked = !!data.enabled;
-        } catch (err) {
-          console.warn('Could not load history toggle state:', err);
         }
       }
 
@@ -184,41 +179,62 @@
       }
 
       async function toggleTpSl(e) {
-        const disabled = !e.target.checked;
-        setTpSlDisabled(disabled);
+        const wantsEnabled = e.target.checked;
+        const newDisabledState = !wantsEnabled;
+
+        // Optimistic UI update
+        setTpSlDisabled(newDisabledState);
 
         try {
-          await fetch('/toggle-tp-sl', {
+          const res = await fetch('/toggle-tp-sl', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ disabled })
+            body: JSON.stringify({ disabled: newDisabledState })
           });
-          setStatus(disabled ? 'TP/SL management disabled — manual closure only' : 'TP/SL management enabled');
+
+          if (!res.ok) throw new Error('Server rejected toggle');
+
+          setStatus(wantsEnabled 
+            ? 'TP/SL Management ENABLED — bot will now place Take Profits & Stop Loss'
+            : 'TP/SL Management DISABLED — manual closure only'
+          );
         } catch (err) {
-          alert('Failed to toggle TP/SL');
-          e.target.checked = !disabled;
+          alert('Failed to update TP/SL setting. Reverting...');
+          console.error('TP/SL toggle failed:', err);
+          setTpSlDisabled(!newDisabledState);
+          e.target.checked = !wantsEnabled; // revert checkbox
         }
       }
 
       useEffect(() => {
         fetchPositions();
-        loadHistoryToggleState();
 
-        // Load TP/SL toggle state
+        // Load current TP/SL status from server (in-memory state)
         fetch('/tp-sl-status')
           .then(r => r.json())
           .then(d => {
-            setTpSlDisabled(d.disabled);
+            const isDisabled = d.disabled === true;
+            setTpSlDisabled(isDisabled);
             const toggle = document.getElementById('tp-sl-toggle');
-            if (toggle) toggle.checked = !d.disabled;
+            if (toggle) {
+              toggle.checked = !isDisabled; // checked = enabled
+            }
+            setStatus(isDisabled 
+              ? 'TP/SL Management is OFF (default on restart)'
+              : 'TP/SL Management is ON'
+            );
+          })
+          .catch(err => {
+            console.warn('Could not load TP/SL status:', err);
+            setStatus('TP/SL Management is OFF (default)');
           });
 
         socket.on('positions', (data) => {
           setPositions(data);
-          setStatus('Positions updated in real-time');
+          setStatus(`${data.length} position(s) active (real-time)`);
         });
 
-        socket.on('welcome', (msg) => console.log('Socket welcome:', msg));
+        socket.on('welcome', (msg) => console.log('Socket:', msg));
 
         const interval = setInterval(fetchPositions, 10000);
         return () => clearInterval(interval);
@@ -245,7 +261,7 @@
                 onChange={toggleTpSl}
                 checked={!tpSlDisabled}
               />
-              {' '}Enable TP/SL Management (disable for manual closure only)
+              {' '}Enable TP/SL Management <strong>(OFF by default on restart)</strong>
             </label>
 
             <div className="button-group">
@@ -287,11 +303,11 @@
                   const isClosed = p.status === 'closed';
                   return (
                     <tr key={i}>
-                      <td>{p.symbol || '-'}</td>
+                      <td><strong>{p.symbol || '-'}</strong></td>
                       <td>{p.direction || '-'}</td>
                       <td>{p.avgEntryPrice ? Number(p.avgEntryPrice).toFixed(4) : '0.0000'}</td>
-                      <td>{p.totalQty ? Number(p.totalQty).toFixed(4) : '0.0000'}</td>
-                      <td>{p.sl ? Number(p.sl) : '-'}</td>
+                      <td>{p.totalQty ? Number(p.totalQty).toFixed(0) : '0'}</td>
+                      <td>{p.sl ? Number(p.sl).toFixed(6) : '-'}</td>
                       <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
                       <td>{p.status || 'open'}</td>
                       <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
@@ -303,28 +319,29 @@
                               background: '#e74c3c',
                               color: 'white',
                               border: 'none',
-                              padding: '6px 10px',
-                              borderRadius: '4px',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
                               cursor: 'pointer',
-                              fontSize: '0.8em'
+                              fontSize: '0.9em',
+                              fontWeight: 'bold'
                             }}
                           >
-                            Delete
+                            🗑️ Delete Record
                           </button>
                         ) : (
                           <button 
                             disabled
                             style={{
                               background: '#95a5a6',
-                              color: '#ecf0f1',
+                              color: '#bdc3c7',
                               border: 'none',
-                              padding: '6px 10px',
-                              borderRadius: '4px',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
                               cursor: 'not-allowed',
-                              fontSize: '0.8em'
+                              fontSize: '0.9em'
                             }}
                           >
-                            Delete
+                            Active
                           </button>
                         )}
                       </td>

@@ -6,7 +6,7 @@ const { getOpenPositions } = require('./utils/getOpenPositions');
 const { placeNextTpLevel } = require('./utils/tpslManager');
 const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
 const { updateHistory } = require('./utils/historyManager');
-const { isTpSlDisabled } = require('./utils/configManager');
+const { isTpSlDisabled } = require('./utils/tpSlControl');
 require('dotenv').config();
 
 const client = new BitunixClient(process.env.BITUNIX_API_KEY, process.env.BITUNIX_API_SECRET);
