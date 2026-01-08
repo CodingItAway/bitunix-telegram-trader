@@ -7,7 +7,7 @@ const socketIo = require('socket.io');
 const axios = require('axios');
 const path = require('path');
 const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
-const { enableHistoryTracking, disableHistoryTracking, getEquityCurve } = require('./utils/historyManager');
+const { getEquityCurve } = require('./utils/historyManager');
 require('./positionManager'); // Auto-starts manager with setInterval
 const { parseMrdSignal } = require('./utils/mrdParser');
 const { executeTrade } = require('./tradeExecutor'); // adjust path if needed
@@ -53,24 +53,6 @@ app.get('/symbols', (req, res) => {
     lastRefresh: global.lastSymbolRefresh
   });
 });
-
-// Toggle history tracking
-app.post('/toggle-history', async (req, res) => {
-  const { enable } = req.body;
-  try {
-    if (enable) {
-      await enableHistoryTracking();
-      res.json({ success: true, status: 'enabled' });
-    } else {
-      await disableHistoryTracking();
-      res.json({ success: true, status: 'disabled' });
-    }
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Remove old /toggle-tp-sl and /tp-sl-status
 
 // NEW: In-memory toggle
 app.post('/toggle-tp-sl', (req, res) => {
@@ -348,6 +330,16 @@ async function refreshSymbols() {
 
 // Initial refresh
 refreshSymbols();
+
+// Auto-enable history tracking on every bot start
+(async () => {
+  try {
+    await enableHistoryTracking();
+    console.log('[STARTUP] History tracking automatically enabled');
+  } catch (err) {
+    console.error('[STARTUP] Failed to auto-enable history tracking:', err.message);
+  }
+})();
 
 // Daily refresh
 setInterval(refreshSymbols, 24 * 60 * 60 * 1000);

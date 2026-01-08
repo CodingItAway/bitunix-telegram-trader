@@ -142,27 +142,6 @@ await saveHistory(history);
   }
 }
 
-async function enableHistoryTracking() {
-  const history = await loadHistory();
-  if (history.featureEnabledAt) return; // already enabled
-
-  const currentBalance = await getCurrentEquity();
-  history.featureEnabledAt = new Date().toISOString();
-  history.initialBalance = currentBalance;
-  history.lastHistoryCheckpoint = Date.now(); // Start from now
-  history.closedPositions = [];
-
-  await saveHistory(history);
-  console.log(`[History] Feature enabled. Starting balance: ${currentBalance}`);
-}
-
-async function disableHistoryTracking() {
-  const history = await loadHistory();
-  history.featureEnabledAt = null;
-  await saveHistory(history);
-  console.log('[History] Feature disabled');
-}
-
 async function getEquityCurve() {
   const history = await loadHistory();
   if (!history.featureEnabledAt) return { enabled: false };
@@ -196,7 +175,5 @@ async function getEquityCurve() {
 
 module.exports = {
   updateHistory,
-  enableHistoryTracking,
-  disableHistoryTracking,
   getEquityCurve
 };

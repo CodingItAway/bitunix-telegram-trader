@@ -161,23 +161,7 @@
           console.error(err);
         }
       }
-
-      async function toggleHistoryTracking(e) {
-        const enable = e.target.checked;
-        try {
-          await fetch('/toggle-history', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ enable })
-          });
-          setStatus(enable ? 'History tracking enabled' : 'History tracking disabled');
-        } catch (err) {
-          alert('Failed to toggle history tracking');
-          console.error(err);
-          e.target.checked = !enable;
-        }
-      }
-
+      
       async function toggleTpSl(e) {
         const wantsEnabled = e.target.checked;
         const newDisabledState = !wantsEnabled;
@@ -245,14 +229,6 @@
           <h1>Bitunix Trading Bot Dashboard</h1>
 
           <div className="toggle-section">
-            <label>
-              <input
-                type="checkbox"
-                id="history-toggle"
-                onChange={toggleHistoryTracking}
-              />
-              {' '}Enable History Tracking & Equity Curve
-            </label>
 
             <label>
               <input
