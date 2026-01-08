@@ -58,6 +58,19 @@ async function signedGet(endpoint, params = {}) {
   }
 }
 
+async function getCurrentMarginUsed() {
+  const account = await signedGet('/api/v1/futures/account', { marginCoin: 'USDT' });
+
+  if (!account) {
+    console.log('[EQUITY] Failed to fetch account data');
+    return 0;
+  }
+
+  const margin = parseFloat(account.margin || 0);
+  
+  return margin;
+}
+
 async function getCurrentEquity() {
   const account = await signedGet('/api/v1/futures/account', { marginCoin: 'USDT' });
 
@@ -83,9 +96,10 @@ async function getCurrentEquity() {
   return totalEquity;
 }
 
-module.exports = { getCurrentEquity };
+module.exports = { getCurrentEquity, getCurrentMarginUsed };
 
 // Optional: Run directly if file is executed
 if (require.main === module) {
   getCurrentEquity();
+  getCurrentMarginUsed();
 }

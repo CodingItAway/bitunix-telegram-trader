@@ -11,7 +11,7 @@ const { getEquityCurve } = require('./utils/historyManager');
 require('./positionManager'); // Auto-starts manager with setInterval
 const { parseMrdSignal } = require('./utils/mrdParser');
 const { executeTrade } = require('./tradeExecutor'); // adjust path if needed
-const { getCurrentEquity } = require('./utils/getAccountBalance');
+const { getCurrentEquity, getCurrentMarginUsed } = require('./utils/getAccountBalance');
 const { batchClosePositions, closeAllPositions, closeRunningTrade } = require('./utils/closeRunningTrade');
 const app = express();
 const server = http.createServer(app);
@@ -260,10 +260,16 @@ app.get('/api/live-equity', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch equity' });
     }
 
+    const marginUsed = await getCurrentMarginUsed();
+    if (marginUsed === null || marginUsed === 0) {
+      return res.status(500).json({ error: 'Failed to get margin used' });
+    }
+
     res.json({
       timestamp: Date.now(),
       equity: parseFloat(equity.toFixed(2)),
-      formatted: equity.toFixed(2)
+      formatted: equity.toFixed(2),
+      margin: marginUsed.toFixed(2)
     });
   } catch (err) {
     console.error('Live equity fetch error:', err.message);
