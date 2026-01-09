@@ -110,12 +110,12 @@ console.log(`[DYNAMIC LEVERAGE] Avg entry: ${plannedAvgEntry.toFixed(6)} | SL di
       sizeResult = await calculatePositionSize(signal);
       if (!sizeResult) throw new Error('Sizing returned null');
 
-      const { notional, riskAmount, currentEquity } = sizeResult;
+      const { notional, riskAmount, riskReference } = sizeResult;
       LEVERAGE = leverage;
       TOTAL_NOTIONAL = notional;
 
       console.log(`DYNAMIC SIZING: ${direction} ${symbol}`);
-      console.log(`   Equity: $${currentEquity.toFixed(2)} | Risk: $${riskAmount.toFixed(2)}`);
+      console.log(`   Equity: $${riskReference.toFixed(2)} | Risk: $${riskAmount.toFixed(2)}`);
       console.log(`   Notional: $${TOTAL_NOTIONAL.toFixed(2)} @ ${LEVERAGE}x`);
     } catch (e) {
       console.log(`Dynamic sizing failed — skipping: ${e.message}`);
