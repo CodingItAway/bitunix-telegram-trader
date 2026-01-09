@@ -7,8 +7,6 @@ const REALIZED_DRAWDOWN_THRESHOLD = 0.05; // 5%
 
 let cache = null;
 
-console.log('[EQUITY MANAGER] Module loaded — starting with clean cache');
-
 async function refreshCache() {
   console.log('[EQUITY MANAGER] refreshCache() called');
 
@@ -16,9 +14,7 @@ async function refreshCache() {
   let currentEquity = null;
 
   try {
-    console.log('[EQUITY MANAGER] Attempting to load history from Drive...');
     history = await loadHistory();
-    console.log('[EQUITY MANAGER] History loaded successfully:', JSON.stringify(history, null, 2));
   } catch (err) {
     console.error('[EQUITY MANAGER] FAILED to load history:', err.message);
     console.error('[EQUITY MANAGER] Stack:', err.stack);
@@ -31,9 +27,7 @@ async function refreshCache() {
   }
 
   try {
-    console.log('[EQUITY MANAGER] Fetching current equity from Bitunix...');
     currentEquity = await getCurrentEquity();
-    console.log('[EQUITY MANAGER] getCurrentEquity() returned:', currentEquity);
   } catch (err) {
     console.error('[EQUITY MANAGER] getCurrentEquity() THREW ERROR:', err.message);
     console.error('[EQUITY MANAGER] Stack:', err.stack);
@@ -47,15 +41,11 @@ async function refreshCache() {
 
   // Peak update
   const currentPeak = history.peakEquity || 0;
-  console.log(`[EQUITY MANAGER] Current peakEquity from history: ${currentPeak}`);
-  console.log(`[EQUITY MANAGER] Current live equity: ${currentEquity}`);
 
   if (currentEquity > currentPeak) {
-    console.log(`[EQUITY MANAGER] New high water mark! Updating peakEquity from ${currentPeak} → ${currentEquity}`);
     history.peakEquity = currentEquity;
     try {
       await saveHistory(history);
-      console.log('[EQUITY MANAGER] Peak updated and saved to Drive');
     } catch (err) {
       console.error('[EQUITY MANAGER] Failed to save updated peak:', err.message);
     }
@@ -66,25 +56,18 @@ async function refreshCache() {
   // Safe closed PnL sum
   let closedPnlSum = 0;
   if (Array.isArray(history.closedPositions)) {
-    console.log(`[EQUITY MANAGER] closedPositions is array with ${history.closedPositions.length} entries`);
     closedPnlSum = history.closedPositions.reduce((sum, p) => {
       const pnl = p.realizedPNL || 0;
-      console.log(`   → Adding PNL: ${pnl} (from position)`);
       return sum + pnl;
     }, 0);
-    console.log(`[EQUITY MANAGER] Total realized PnL from closed positions: ${closedPnlSum}`);
   } else {
     console.warn('[EQUITY MANAGER] closedPositions is NOT an array:', history.closedPositions);
   }
 
   const initial = history.initialBalance || 0;
-  console.log(`[EQUITY MANAGER] initialBalance: ${initial}`);
 
   const realizedEquity = initial + closedPnlSum;
   const unrealizedPnL = currentEquity - realizedEquity;
-
-  console.log(`[EQUITY MANAGER] Calculated realizedEquity: ${realizedEquity}`);
-  console.log(`[EQUITY MANAGER] Calculated unrealizedPnL: ${unrealizedPnL}`);
 
   cache = {
     ...history,
@@ -92,16 +75,6 @@ async function refreshCache() {
     unrealizedPnL,
     realizedEquity
   };
-
-  console.log('[EQUITY MANAGER] Cache refreshed successfully');
-  console.log('[EQUITY MANAGER] Final cache state:', JSON.stringify({
-    initialBalance: cache.initialBalance,
-    peakEquity: cache.peakEquity,
-    currentEquity: cache.currentEquity,
-    realizedEquity: cache.realizedEquity,
-    unrealizedPnL: cache.unrealizedPnL,
-    riskBaseMode: cache.riskBaseMode
-  }, null, 2));
 
   return cache;
 }
