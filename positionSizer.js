@@ -104,7 +104,7 @@ try {
   
   const riskReference = await getRiskReference();
   const currentEquityForLog = await getCurrentEquity(); // only for logging
-  console.log(`[POSITION SIZER] Using Risk Reference: $${riskReference} (instead of live equity $${currentEquityForLog.toFixed(2)})`);
+  console.log(`[POSITION SIZER] Using Risk Reference: $${riskReference} (instead of live equity $${currentEquityForLog})`);
   
 
   const usedMarginPercent = (parseFloat(usedMargin || 0) / riskReference) * 100;
