@@ -33,7 +33,32 @@
       text-align: center;
       color: #4a5568;
       font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+
+    /* Navigation Bar */
+    .nav-bar {
+      text-align: center;
       margin-bottom: 30px;
+    }
+    .nav-bar a {
+      display: inline-block;
+      padding: 12px 24px;
+      margin: 0 10px;
+      background: #4299e1;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+    .nav-bar a:hover {
+      background: #3182ce;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+    }
+    .nav-bar a.active {
+      background: #2b6cb0;
     }
 
     /* Capital Panel */
@@ -117,6 +142,7 @@
       box-shadow: 0 10px 20px rgba(0,0,0,0.2);
     }
 
+    /* Table & Pagination */
     table {
       width: 100%;
       border-collapse: separate;
@@ -151,6 +177,32 @@
       color: #718096;
       font-weight: bold;
     }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 30px 0;
+      gap: 15px;
+      font-size: 1.1em;
+    }
+    .pagination button {
+      padding: 10px 20px;
+      background: #4299e1;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .pagination button:disabled {
+      background: #a0aec0;
+      cursor: not-allowed;
+    }
+    .pagination button:hover:not(:disabled) {
+      background: #3182ce;
+    }
+
     .status {
       text-align: center;
       margin-top: 30px;
@@ -158,6 +210,7 @@
       color: #4a5568;
       min-height: 28px;
     }
+
     .toggle-section {
       text-align: center;
       margin: 30px 0;
@@ -208,6 +261,8 @@
       const [status, setStatus] = useState('Connecting...');
       const [tpSlDisabled, setTpSlDisabled] = useState(true);
       const [capitalStatus, setCapitalStatus] = useState(null);
+      const [currentPage, setCurrentPage] = useState(1);
+      const positionsPerPage = 10;
 
       useEffect(() => {
         const socket = io();
@@ -217,16 +272,19 @@
         });
 
         socket.on('positions', (data) => {
-          setPositions(data);
+          // Sort by newest first
+          const sorted = [...data].sort((a, b) => 
+            (new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+          );
+          setPositions(sorted);
           setStatus(`Last update: ${new Date().toLocaleTimeString()}`);
         });
 
-        // Initial fetch
+        // Initial fetches
         fetchPositions();
         fetchTpSlStatus();
         fetchCapitalStatus();
 
-        // Periodic updates
         const interval = setInterval(() => {
           fetchPositions();
           fetchCapitalStatus();
@@ -242,7 +300,10 @@
         try {
           const res = await fetch('/positions');
           const data = await res.json();
-          setPositions(data);
+          const sorted = [...data].sort((a, b) => 
+            (new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+          );
+          setPositions(sorted);
         } catch (e) {
           console.error(e);
         }
@@ -296,17 +357,24 @@
         }
       };
 
-      const deletePosition = async (index) => {
-        if (confirm('Delete this closed position record?')) {
-          const newPositions = positions.filter((_, i) => i !== index);
-          // In real implementation, you'd have a backend endpoint
-          alert('Not implemented: would remove from storage');
-        }
-      };
+      // Pagination logic
+      const indexOfLast = currentPage * positionsPerPage;
+      const indexOfFirst = indexOfLast - positionsPerPage;
+      const currentPositions = positions.slice(indexOfFirst, indexOfLast);
+      const totalPages = Math.ceil(positions.length / positionsPerPage);
+
+      const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
       return (
         <div className="container">
           <h1>🚀 Bitunix Trading Bot Dashboard</h1>
+
+          {/* Navigation Links */}
+          <div className="nav-bar">
+            <a href="/" className="active">Dashboard</a>
+            <a href="/history.html">History & Equity Curve</a>
+            <a href="/audit.html">Signal Audit Log</a>
+          </div>
 
           {/* Capital & Risk Status Panel */}
           {capitalStatus && capitalStatus.initialCapital > 0 && (
@@ -371,42 +439,41 @@
             </div>
           </div>
 
-          {/* Positions Table */}
+          {/* Positions Table with Pagination */}
           {positions.length === 0 ? (
             <div className="no-positions">No active positions</div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Direction</th>
-                  <th>Avg Entry</th>
-                  <th>Total Qty</th>
-                  <th>Stop Loss</th>
-                  <th>TPs Set</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((p, i) => {
-                  const isClosed = p.status === 'closed';
-                  return (
-                    <tr key={i}>
-                      <td><strong>{p.symbol || '-'}</strong></td>
-                      <td>{p.direction || '-'}</td>
-                      <td>{p.avgEntryPrice ? Number(p.avgEntryPrice).toFixed(4) : '0.0000'}</td>
-                      <td>{p.totalQty ? Number(p.totalQty).toFixed(0) : '0'}</td>
-                      <td>{p.sl ? Number(p.sl).toFixed(6) : '-'}</td>
-                      <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
-                      <td>{p.status || 'open'}</td>
-                      <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
-                      <td>
-                        {isClosed ? (
-                          <button 
-                            onClick={() => deletePosition(i)}
-                            style={{
+            <>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Direction</th>
+                    <th>Avg Entry</th>
+                    <th>Total Qty</th>
+                    <th>Stop Loss</th>
+                    <th>TPs Set</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentPositions.map((p, i) => {
+                    const isClosed = p.status === 'closed';
+                    return (
+                      <tr key={i}>
+                        <td><strong>{p.symbol || '-'}</strong></td>
+                        <td>{p.direction || '-'}</td>
+                        <td>{p.avgEntryPrice ? Number(p.avgEntryPrice).toFixed(4) : '0.0000'}</td>
+                        <td>{p.totalQty ? Number(p.totalQty).toFixed(0) : '0'}</td>
+                        <td>{p.sl ? Number(p.sl).toFixed(6) : '-'}</td>
+                        <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
+                        <td>{p.status || 'open'}</td>
+                        <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
+                        <td>
+                          {isClosed ? (
+                            <button style={{
                               background: '#e74c3c',
                               color: 'white',
                               border: 'none',
@@ -415,14 +482,11 @@
                               cursor: 'pointer',
                               fontSize: '0.9em',
                               fontWeight: 'bold'
-                            }}
-                          >
-                            🗑️ Delete Record
-                          </button>
-                        ) : (
-                          <button 
-                            disabled
-                            style={{
+                            }}>
+                              🗑️ Delete Record
+                            </button>
+                          ) : (
+                            <button disabled style={{
                               background: '#95a5a6',
                               color: '#bdc3c7',
                               border: 'none',
@@ -430,17 +494,35 @@
                               borderRadius: '6px',
                               cursor: 'not-allowed',
                               fontSize: '0.9em'
-                            }}
-                          >
-                            Active
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            }}>
+                              Active
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {totalPages > 1 && (
+                <div className="pagination">
+                  <button 
+                    onClick={() => paginate(currentPage - 1)} 
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <span>Page {currentPage} of {totalPages}</span>
+                  <button 
+                    onClick={() => paginate(currentPage + 1)} 
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
           <div className="status">{status}</div>
