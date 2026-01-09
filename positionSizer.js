@@ -80,6 +80,14 @@ async function calculatePositionSize(signal) {
 
   console.log(`[POSITION SIZER] Total used margin: $${usedMargin.toFixed(2)} USDT`);
 
+ // NEW: Use standalone balance fetch
+  console.log('[POSITION SIZER] Fetching current equity...');
+  
+  const riskReference = await getRiskReference();
+  const currentEquityForLog = await getCurrentEquity(); // only for logging
+  console.log(`[POSITION SIZER] Using Risk Reference: $${riskReference} (instead of live equity $${currentEquityForLog.toFixed(2)})`);
+  
+
   const usedMarginPercent = (parseFloat(usedMargin || 0) / riskReference) * 100;
   console.log(`[POSITION SIZER] Used margin percent: ${usedMarginPercent.toFixed(2)}%`);
 
@@ -100,13 +108,6 @@ async function calculatePositionSize(signal) {
     return null;
   }
 
-   // NEW: Use standalone balance fetch
-  console.log('[POSITION SIZER] Fetching current equity...');
-  
-  const riskReference = await getRiskReference();
-  const currentEquityForLog = await getCurrentEquity(); // only for logging
-  console.log(`[POSITION SIZER] Using Risk Reference: $${riskReference} (instead of live equity $${currentEquityForLog.toFixed(2)})`);
-  
 
   if (riskReference === 0) {
     console.log('[POSITION SIZER] Failed to fetch equity (returned 0), skipping dynamic sizing');
