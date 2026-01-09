@@ -57,9 +57,6 @@
       transform: translateY(-2px);
       box-shadow: 0 8px 15px rgba(0,0,0,0.2);
     }
-    .nav-bar a.active {
-      background: #2b6cb0;
-    }
 
     /* Capital Panel */
     .capital-panel {
@@ -272,7 +269,6 @@
         });
 
         socket.on('positions', (data) => {
-          // Sort by newest first
           const sorted = [...data].sort((a, b) => 
             (new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
           );
@@ -280,7 +276,6 @@
           setStatus(`Last update: ${new Date().toLocaleTimeString()}`);
         });
 
-        // Initial fetches
         fetchPositions();
         fetchTpSlStatus();
         fetchCapitalStatus();
@@ -324,6 +319,15 @@
           const res = await fetch('/capital-status');
           if (res.ok) {
             const data = await res.json();
+
+            // Calculate Unrealized Drawdown % from peak
+            if (data.peakEquity > 0) {
+              const unrealizedDD = ((data.currentEquity - data.peakEquity) / data.peakEquity) * 100;
+              data.unrealizedDrawdownPercent = unrealizedDD.toFixed(2);
+            } else {
+              data.unrealizedDrawdownPercent = '0.00';
+            }
+
             setCapitalStatus(data);
           }
         } catch (e) {
@@ -357,7 +361,7 @@
         }
       };
 
-      // Pagination logic
+      // Pagination
       const indexOfLast = currentPage * positionsPerPage;
       const indexOfFirst = indexOfLast - positionsPerPage;
       const currentPositions = positions.slice(indexOfFirst, indexOfLast);
@@ -369,9 +373,8 @@
         <div className="container">
           <h1>🚀 Bitunix Trading Bot Dashboard</h1>
 
-          {/* Navigation Links */}
+          {/* Navigation Links - No redundant Dashboard button */}
           <div className="nav-bar">
-            <a href="/" className="active">Dashboard</a>
             <a href="/history.html">History & Equity Curve</a>
             <a href="/audit.html">Signal Audit Log</a>
           </div>
@@ -396,9 +399,9 @@
                   </span>
                 </div>
                 <div className="capital-item">
-                  <strong>Unrealized PnL</strong>
-                  <span className={capitalStatus.unrealizedPnL < 0 ? 'negative' : 'positive'}>
-                    ${Number(capitalStatus.unrealizedPnL).toFixed(2)}
+                  <strong>Unrealized Drawdown</strong>
+                  <span className={parseFloat(capitalStatus.unrealizedDrawdownPercent) < 0 ? 'negative' : 'positive'}>
+                    {capitalStatus.unrealizedDrawdownPercent}%
                   </span>
                 </div>
                 <div className="capital-item">
