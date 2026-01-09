@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 // REPLACE THIS with your shared folder ID from Google Drive
 // How to get it: Open the folder → URL is https://drive.google.com/drive/folders/THIS_IS_THE_ID
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
-
+const HISTORY_FILE_NAME = 'bitunix-history.json';
 const FILE_NAME = 'bitunix-positions.json';
 
 let drive;
@@ -138,7 +138,7 @@ async function savePositions(positions) {
   }
 }
 
-const HISTORY_FILE_NAME = 'bitunix-history.json';
+
 
 async function loadHistory() {
   if (!drive && !(await authGoogle())) {
@@ -187,7 +187,10 @@ async function loadHistory() {
       initialBalance: parsedData.initialBalance || 0,
       closedPositions: parsedData.closedPositions || [],
       lastHistoryCheckpoint: parsedData.lastHistoryCheckpoint || 0,
-      pendingCloseIntents: parsedData.pendingCloseIntents || {} // ← ADD
+      pendingCloseIntents: parsedData.pendingCloseIntents || {},
+      peakEquity: parsedData.peakEquity || parsedData.initialBalance || 0,
+      riskBaseMode: parsedData.riskBaseMode || 'aggressive', // 'aggressive' or 'protective'
+      realizedDrawdownAccepted: parsedData.realizedDrawdownAccepted || false, // ← ADD
     };
 
   } catch (err) {

@@ -4,7 +4,7 @@ const { getCurrentEquity } = require('./utils/getAccountBalance');
 const { logSignal } = require('./utils/signalAuditor');
 const { loadPositions } = require('./storage/googleDriveStorage');
 const CryptoJS = require('crypto-js');
-
+const { getRiskReference } = require('./utils/equityAllocationManager');
 const API_BASE = 'https://fapi.bitunix.com';
 const API_KEY = process.env.BITUNIX_API_KEY;
 const API_SECRET = process.env.BITUNIX_API_SECRET;
@@ -70,10 +70,13 @@ async function calculatePositionSize(signal) {
 
   // NEW: Use standalone balance fetch
   console.log('[POSITION SIZER] Fetching current equity...');
-  const currentEquity = await getCurrentEquity();
-  console.log(`[POSITION SIZER] Current equity fetched: $${currentEquity.toFixed(2)} USDT`);
+  
+  const riskReference = await getRiskReference();
+  const currentEquityForLog = await getCurrentEquity(); // only for logging
+  console.log(`[POSITION SIZER] Using Risk Reference: $${riskReference.toFixed(2)} (instead of live equity $${currentEquityForLog.toFixed(2)})`);
+  
 
-  if (currentEquity === 0) {
+  if (riskReference === 0) {
     console.log('[POSITION SIZER] Failed to fetch equity (returned 0), skipping dynamic sizing');
     return null;
   }
@@ -90,7 +93,7 @@ async function calculatePositionSize(signal) {
 
   console.log(`[POSITION SIZER] Total used margin: $${usedMargin.toFixed(2)} USDT`);
 
-  const usedMarginPercent = (parseFloat(usedMargin || 0) / currentEquity) * 100;
+  const usedMarginPercent = (parseFloat(usedMargin || 0) / riskReference) * 100;
   console.log(`[POSITION SIZER] Used margin percent: ${usedMarginPercent.toFixed(2)}%`);
 
   if (openCount >= parseInt(process.env.MAX_CONCURRENT_POSITIONS)) {
@@ -119,7 +122,7 @@ async function calculatePositionSize(signal) {
   const riskDistance = distance / avgEntry;
   console.log(`[POSITION SIZER] Risk distance %: ${(riskDistance * 100).toFixed(4)}%`);
 
-  const riskAmount = currentEquity * (parseFloat(process.env.RISK_PER_TRADE_PERCENT) / 100);
+  const riskAmount = riskReference * (parseFloat(process.env.RISK_PER_TRADE_PERCENT) / 100);
   console.log(`[POSITION SIZER] Risk amount: $${riskAmount.toFixed(2)} (${process.env.RISK_PER_TRADE_PERCENT}% of equity)`);
 
   let notional = Math.abs(riskAmount / riskDistance);
@@ -169,7 +172,7 @@ async function calculatePositionSize(signal) {
     qtyPerEntry,
     notional,
     riskAmount,
-    currentEquity
+    riskReference
   };
 }
 
