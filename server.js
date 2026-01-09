@@ -16,6 +16,7 @@ const { batchClosePositions, closeAllPositions, closeRunningTrade } = require('.
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
+const { getCapitalStatus, acceptRealizedDrawdown, forceAggressiveMode } = require('./utils/equityAllocationManager');
 
 const BASE_URL = 'https://fapi.bitunix.com';
 
@@ -26,6 +27,29 @@ global.lastSymbolRefresh = null;
 // Serve static files (dashboard)
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
+
+// Get capital status for dashboard
+app.get('/capital-status', async (req, res) => {
+  try {
+    const status = await getCapitalStatus();
+    res.json(status);
+  } catch (err) {
+    console.error('Capital status error:', err);
+    res.status(500).json({});
+  }
+});
+
+// User accepts drawdown
+app.post('/accept-drawdown', async (req, res) => {
+  await acceptRealizedDrawdown();
+  res.json({ success: true });
+});
+
+// User forces aggressive
+app.post('/force-aggressive', async (req, res) => {
+  await forceAggressiveMode();
+  res.json({ success: true });
+});
 
 // Health check
 app.get('/health', (req, res) => {

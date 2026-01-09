@@ -35,6 +35,88 @@
       font-size: 2.5em;
       margin-bottom: 30px;
     }
+
+    /* Capital Panel */
+    .capital-panel {
+      margin: 30px 0;
+      padding: 30px;
+      background: #1e293b;
+      border-radius: 16px;
+      color: white;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .capital-panel h2 {
+      margin-top: 0;
+      text-align: center;
+      font-size: 1.8em;
+      margin-bottom: 20px;
+    }
+    .capital-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      text-align: center;
+      font-size: 1.1em;
+    }
+    .capital-item strong {
+      display: block;
+      font-size: 0.9em;
+      opacity: 0.9;
+      margin-bottom: 8px;
+    }
+    .capital-item span {
+      font-size: 1.4em;
+      font-weight: bold;
+    }
+    .highlight {
+      font-size: 1.6em !important;
+      color: #fbbf24;
+    }
+    .positive { color: #10b981; }
+    .negative { color: #ef4444; }
+
+    .drawdown-warning {
+      text-align: center;
+      margin-top: 25px;
+      padding: 20px;
+      background: rgba(239, 68, 68, 0.2);
+      border-radius: 12px;
+      border: 2px solid #ef4444;
+    }
+    .drawdown-warning p {
+      color: #ff6b6b;
+      font-weight: bold;
+      font-size: 1.3em;
+      margin: 0 0 20px 0;
+    }
+    .action-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .action-buttons button {
+      padding: 14px 28px;
+      font-size: 1.1em;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .accept-btn {
+      background: #e74c3c;
+      color: white;
+    }
+    .aggressive-btn {
+      background: #27ae60;
+      color: white;
+    }
+    .action-buttons button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    }
+
     table {
       width: 100%;
       border-collapse: separate;
@@ -97,24 +179,21 @@
       gap: 20px;
       flex-wrap: wrap;
     }
-    .dashboard-button {
-      padding: 14px 32px;
-      font-size: 1.2em;
-      background: #4299e1;
-      color: white;
+    .button-group button {
+      padding: 12px 24px;
+      font-size: 1.1em;
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
       cursor: pointer;
       font-weight: bold;
-      box-shadow: 0 6px 15px rgba(66, 153, 225, 0.3);
-      transition: all 0.3s ease;
-      text-decoration: none;
-      display: inline-block;
     }
-    .dashboard-button:hover {
-      background: #3182ce;
-      transform: translateY(-3px);
-      box-shadow: 0 10px 25px rgba(66, 153, 225, 0.4);
+    .enabled {
+      background: #27ae60;
+      color: white;
+    }
+    .disabled {
+      background: #e74c3c;
+      color: white;
     }
   </style>
 </head>
@@ -126,139 +205,175 @@
 
     function App() {
       const [positions, setPositions] = useState([]);
-      const [status, setStatus] = useState('Loading dashboard...');
-      const [tpSlDisabled, setTpSlDisabled] = useState(true); // Default: disabled
-      const socket = io();
+      const [status, setStatus] = useState('Connecting...');
+      const [tpSlDisabled, setTpSlDisabled] = useState(true);
+      const [capitalStatus, setCapitalStatus] = useState(null);
 
-      async function fetchPositions() {
+      useEffect(() => {
+        const socket = io();
+
+        socket.on('welcome', (msg) => {
+          setStatus(msg);
+        });
+
+        socket.on('positions', (data) => {
+          setPositions(data);
+          setStatus(`Last update: ${new Date().toLocaleTimeString()}`);
+        });
+
+        // Initial fetch
+        fetchPositions();
+        fetchTpSlStatus();
+        fetchCapitalStatus();
+
+        // Periodic updates
+        const interval = setInterval(() => {
+          fetchPositions();
+          fetchCapitalStatus();
+        }, 10000);
+
+        return () => {
+          socket.disconnect();
+          clearInterval(interval);
+        };
+      }, []);
+
+      const fetchPositions = async () => {
         try {
           const res = await fetch('/positions');
           const data = await res.json();
           setPositions(data);
-          setStatus(data.length === 0 ? 'No active positions' : `${data.length} position(s) active`);
-        } catch (err) {
-          setStatus('Error loading positions');
-          console.error('Fetch positions error:', err);
+        } catch (e) {
+          console.error(e);
         }
-      }
+      };
 
-      async function deletePosition(index) {
-        if (!confirm('Permanently delete this closed position from records?')) return;
+      const fetchTpSlStatus = async () => {
         try {
-          const res = await fetch('/delete-position', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ index })
-          });
+          const res = await fetch('/tp-sl-status');
+          const data = await res.json();
+          setTpSlDisabled(data.disabled);
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      const fetchCapitalStatus = async () => {
+        try {
+          const res = await fetch('/capital-status');
           if (res.ok) {
-            fetchPositions();
-            setStatus('Closed position deleted');
-          } else {
-            alert('Failed to delete position');
+            const data = await res.json();
+            setCapitalStatus(data);
           }
-        } catch (err) {
-          alert('Failed to delete position');
-          console.error(err);
+        } catch (e) {
+          console.error('Failed to fetch capital status:', e);
         }
-      }
-      
-      async function toggleTpSl(e) {
-        const wantsEnabled = e.target.checked;
-        const newDisabledState = !wantsEnabled;
+      };
 
-        // Optimistic UI update
-        setTpSlDisabled(newDisabledState);
-
-        try {
-          const res = await fetch('/toggle-tp-sl', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ disabled: newDisabledState })
-          });
-
-          if (!res.ok) throw new Error('Server rejected toggle');
-
-          setStatus(wantsEnabled 
-            ? 'TP/SL Management ENABLED — bot will now place Take Profits & Stop Loss'
-            : 'TP/SL Management DISABLED — manual closure only'
-          );
-        } catch (err) {
-          alert('Failed to update TP/SL setting. Reverting...');
-          console.error('TP/SL toggle failed:', err);
-          setTpSlDisabled(!newDisabledState);
-          e.target.checked = !wantsEnabled; // revert checkbox
-        }
-      }
-
-      useEffect(() => {
-        fetchPositions();
-
-        // Load current TP/SL status from server (in-memory state)
-        fetch('/tp-sl-status')
-          .then(r => r.json())
-          .then(d => {
-            const isDisabled = d.disabled === true;
-            setTpSlDisabled(isDisabled);
-            const toggle = document.getElementById('tp-sl-toggle');
-            if (toggle) {
-              toggle.checked = !isDisabled; // checked = enabled
-            }
-            setStatus(isDisabled 
-              ? 'TP/SL Management is OFF (default on restart)'
-              : 'TP/SL Management is ON'
-            );
-          })
-          .catch(err => {
-            console.warn('Could not load TP/SL status:', err);
-            setStatus('TP/SL Management is OFF (default)');
-          });
-
-        socket.on('positions', (data) => {
-          setPositions(data);
-          setStatus(`${data.length} position(s) active (real-time)`);
+      const toggleTpSl = async () => {
+        const newState = !tpSlDisabled;
+        await fetch('/toggle-tp-sl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ disabled: newState })
         });
+        setTpSlDisabled(newState);
+      };
 
-        socket.on('welcome', (msg) => console.log('Socket:', msg));
+      const acceptDrawdown = async () => {
+        if (confirm('Accept realized drawdown and set new lower capital base? This cannot be undone easily.')) {
+          await fetch('/accept-drawdown', { method: 'POST' });
+          alert('New capital base accepted.');
+          fetchCapitalStatus();
+        }
+      };
 
-        const interval = setInterval(fetchPositions, 10000);
-        return () => clearInterval(interval);
-      }, []);
+      const stayAggressive = async () => {
+        if (confirm('Continue using peak equity for sizing despite realized losses?')) {
+          await fetch('/force-aggressive', { method: 'POST' });
+          alert('Aggressive mode confirmed.');
+          fetchCapitalStatus();
+        }
+      };
+
+      const deletePosition = async (index) => {
+        if (confirm('Delete this closed position record?')) {
+          const newPositions = positions.filter((_, i) => i !== index);
+          // In real implementation, you'd have a backend endpoint
+          alert('Not implemented: would remove from storage');
+        }
+      };
 
       return (
         <div className="container">
-          <h1>Bitunix Trading Bot Dashboard</h1>
+          <h1>🚀 Bitunix Trading Bot Dashboard</h1>
 
+          {/* Capital & Risk Status Panel */}
+          {capitalStatus && capitalStatus.initialCapital > 0 && (
+            <div className="capital-panel">
+              <h2>Capital & Risk Status</h2>
+              <div className="capital-grid">
+                <div className="capital-item">
+                  <strong>Initial Capital</strong>
+                  <span>${Number(capitalStatus.initialCapital).toFixed(2)}</span>
+                </div>
+                <div className="capital-item">
+                  <strong>Peak Equity</strong>
+                  <span className="positive">${Number(capitalStatus.peakEquity).toFixed(2)}</span>
+                </div>
+                <div className="capital-item">
+                  <strong>Current Equity</strong>
+                  <span className={capitalStatus.currentEquity < capitalStatus.initialCapital * 0.95 ? 'negative' : ''}>
+                    ${Number(capitalStatus.currentEquity).toFixed(2)}
+                  </span>
+                </div>
+                <div className="capital-item">
+                  <strong>Unrealized PnL</strong>
+                  <span className={capitalStatus.unrealizedPnL < 0 ? 'negative' : 'positive'}>
+                    ${Number(capitalStatus.unrealizedPnL).toFixed(2)}
+                  </span>
+                </div>
+                <div className="capital-item">
+                  <strong>Realized Drawdown</strong>
+                  <span className={parseFloat(capitalStatus.realizedDrawdownPercent) <= -5 ? 'negative' : ''}>
+                    {capitalStatus.realizedDrawdownPercent}%
+                  </span>
+                </div>
+                <div className="capital-item">
+                  <strong>Risk Reference</strong>
+                  <span className="highlight">${Number(capitalStatus.riskReference).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {capitalStatus.showAcceptDrawdownButton && (
+                <div className="drawdown-warning">
+                  <p>⚠️ Realized Drawdown Exceeds 5%</p>
+                  <div className="action-buttons">
+                    <button className="accept-btn" onClick={acceptDrawdown}>
+                      Accept New Lower Base
+                    </button>
+                    <button className="aggressive-btn" onClick={stayAggressive}>
+                      Stay Aggressive (Use Peak)
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TP/SL Toggle */}
           <div className="toggle-section">
-
-            <label>
-              <input
-                type="checkbox"
-                id="tp-sl-toggle"
-                onChange={toggleTpSl}
-                checked={!tpSlDisabled}
-              />
-              {' '}Enable TP/SL Management <strong>(OFF by default on restart)</strong>
-            </label>
-
+            <label>Take Profit & Stop Loss Management</label>
             <div className="button-group">
-              <button
-                onClick={() => window.location.href = '/history'}
-                className="dashboard-button"
-              >
-                📈 View Trading History & Equity Curve →
-              </button>
-
-              <button
-                onClick={() => window.location.href = '/audit'}
-                className="dashboard-button"
-              >
-                📊 View Signal Audit Log →
+              <button className={tpSlDisabled ? 'disabled' : 'enabled'} onClick={toggleTpSl}>
+                {tpSlDisabled ? 'DISABLED' : 'ENABLED'}
               </button>
             </div>
           </div>
 
+          {/* Positions Table */}
           {positions.length === 0 ? (
-            <div className="no-positions">No positions yet</div>
+            <div className="no-positions">No active positions</div>
           ) : (
             <table>
               <thead>
@@ -267,7 +382,7 @@
                   <th>Direction</th>
                   <th>Avg Entry</th>
                   <th>Total Qty</th>
-                  <th>SL</th>
+                  <th>Stop Loss</th>
                   <th>TPs Set</th>
                   <th>Status</th>
                   <th>Created</th>
