@@ -68,19 +68,6 @@ async function calculatePositionSize(signal) {
     return null;
   }
 
-  // NEW: Use standalone balance fetch
-  console.log('[POSITION SIZER] Fetching current equity...');
-  
-  const riskReference = await getRiskReference();
-  const currentEquityForLog = await getCurrentEquity(); // only for logging
-  console.log(`[POSITION SIZER] Using Risk Reference: $${riskReference.toFixed(2)} (instead of live equity $${currentEquityForLog.toFixed(2)})`);
-  
-
-  if (riskReference === 0) {
-    console.log('[POSITION SIZER] Failed to fetch equity (returned 0), skipping dynamic sizing');
-    return null;
-  }
-
   console.log('[POSITION SIZER] Fetching open positions...');
   const positions = await loadPositions();
   const openCount = positions.filter(p => p.isMaster && p.status === 'open').length;
@@ -110,6 +97,19 @@ async function calculatePositionSize(signal) {
       reason: 'max_margin_usage_reached',
       usedMarginPercent
     });
+    return null;
+  }
+
+   // NEW: Use standalone balance fetch
+  console.log('[POSITION SIZER] Fetching current equity...');
+  
+  const riskReference = await getRiskReference();
+  const currentEquityForLog = await getCurrentEquity(); // only for logging
+  console.log(`[POSITION SIZER] Using Risk Reference: $${riskReference} (instead of live equity $${currentEquityForLog.toFixed(2)})`);
+  
+
+  if (riskReference === 0) {
+    console.log('[POSITION SIZER] Failed to fetch equity (returned 0), skipping dynamic sizing');
     return null;
   }
 
