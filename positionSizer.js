@@ -1,5 +1,5 @@
 // positionSizer.js - Fixed import + Enhanced logging for debugging
-
+const axios = require('axios'); // already required in server.js, but safe to add
 const { getCurrentEquity } = require('./utils/getAccountBalance');
 const { logSignal } = require('./utils/signalAuditor');
 const { loadPositions } = require('./storage/googleDriveStorage');
@@ -67,6 +67,25 @@ async function calculatePositionSize(signal) {
     console.log('[POSITION SIZER] No entries in signal — skipping');
     return null;
   }
+
+  // === FETCH SYMBOL SPECS DIRECTLY FROM BITUNIX API (public, no auth) ===
+let symbolInfo = { minQty: 0.01, qtyPrecision: 2 }; // safe fallback
+
+try {
+  const response = await axios.get(`https://fapi.bitunix.com/api/v1/futures/market/trading_pairs?symbols=${signal.symbol}`, { timeout: 5000 });
+  if (response.data.code === 0 && response.data.data && response.data.data.length > 0) {
+    const info = response.data.data[0];
+    symbolInfo = {
+      minQty: parseFloat(info.minTradeVolume || '0.01'),
+      qtyPrecision: parseInt(info.basePrecision || 2)
+    };
+    console.log(`[POSITION SIZER] Fetched ${signal.symbol} specs: minQty=${symbolInfo.minQty}, qtyPrecision=${symbolInfo.qtyPrecision}`);
+  } else {
+    console.warn(`[POSITION SIZER] Unexpected response for ${signal.symbol} specs — using fallback`);
+  }
+} catch (err) {
+  console.warn(`[POSITION SIZER] Failed to fetch specs for ${signal.symbol} — using fallback minQty=0.01`, err.message);
+}
 
   console.log('[POSITION SIZER] Fetching open positions...');
   const positions = await loadPositions();
@@ -157,16 +176,30 @@ async function calculatePositionSize(signal) {
     console.log('[POSITION SIZER] Standard symbol — multiplier = 1');
   }
 
-  console.log('[POSITION SIZER] Calculating qty per entry...');
-  const qtyPerEntry = entries.map((entry, i) => {
-    const rawQty = (notionalPerEntry / entry) / multiplier;
-    const qty = rawQty.toFixed(0);
-    console.log(`   → Entry ${i+1} @ $${entry}: raw qty = ${rawQty.toFixed(6)} → rounded to ${qty}`);
-    return qty;
-  });
+// === CALCULATE QTY WITH EXCHANGE RULES ===
+console.log('[POSITION SIZER] Calculating qty per entry with Bitunix rules...');
+const qtyPerEntry = entries.map((entry, i) => {
+  let rawQty = (notionalPerEntry / entry) / multiplier;
 
-  const totalPlannedQty = qtyPerEntry.reduce((a, b) => a + parseFloat(b), 0);
-  console.log(`[POSITION SIZER] Total planned qty: ${totalPlannedQty} contracts`);
+  // Enforce minimum qty per order
+  if (rawQty < symbolInfo.minQty) {
+    console.log(`   → Raw qty ${rawQty.toFixed(6)} below exchange min ${symbolInfo.minQty} — boosting to min`);
+    rawQty = symbolInfo.minQty;
+  }
+
+  // Round properly to exchange precision
+  const qty = Number(rawQty.toFixed(symbolInfo.qtyPrecision));
+
+  console.log(`   → Entry ${i+1} @ $${entry}: raw ${rawQty.toFixed(6)} → final ${qty}`);
+  return qty;
+});
+
+// Final total check
+const totalPlannedQty = qtyPerEntry.reduce((a, b) => a + parseFloat(b), 0);
+if (totalPlannedQty === 0 || totalPlannedQty < symbolInfo.minQty * entries.length) {
+  console.log(`[POSITION SIZER] Total qty ${totalPlannedQty} invalid after adjustment — skipping trade`);
+  return null;
+}
 
   console.log(`[POSITION SIZER] Sizing complete → returning result`);
   return {
