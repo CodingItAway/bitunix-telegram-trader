@@ -41,3 +41,4 @@ dump.json
 
 # Render / deployment artifacts (optional)
 .render/
+test.js

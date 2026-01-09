@@ -399,9 +399,9 @@
                   </span>
                 </div>
                 <div className="capital-item">
-                  <strong>Unrealized Drawdown</strong>
-                  <span className={parseFloat(capitalStatus.unrealizedDrawdownPercent) < 0 ? 'negative' : 'positive'}>
-                    {capitalStatus.unrealizedDrawdownPercent}%
+                  <strong>Equity Available</strong>
+                  <span className="positive">
+                    ${Number(capitalStatus.availableBalance || 0).toFixed(2)}
                   </span>
                 </div>
                 <div className="capital-item">
@@ -456,14 +456,12 @@
                     <th>Total Qty</th>
                     <th>Stop Loss</th>
                     <th>TPs Set</th>
-                    <th>Status</th>
                     <th>Created</th>
-                    <th>Action</th>
+                    <th>Note</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentPositions.map((p, i) => {
-                    const isClosed = p.status === 'closed';
                     return (
                       <tr key={i}>
                         <td><strong>{p.symbol || '-'}</strong></td>
@@ -472,36 +470,8 @@
                         <td>{p.totalQty ? Number(p.totalQty).toFixed(0) : '0'}</td>
                         <td>{p.sl ? Number(p.sl).toFixed(6) : '-'}</td>
                         <td>{p.tpSetCount || 0} / {p.originalTargets?.length || 0}</td>
-                        <td>{p.status || 'open'}</td>
                         <td>{p.createdAt ? new Date(p.createdAt).toLocaleString() : '-'}</td>
-                        <td>
-                          {isClosed ? (
-                            <button style={{
-                              background: '#e74c3c',
-                              color: 'white',
-                              border: 'none',
-                              padding: '8px 12px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '0.9em',
-                              fontWeight: 'bold'
-                            }}>
-                              🗑️ Delete Record
-                            </button>
-                          ) : (
-                            <button disabled style={{
-                              background: '#95a5a6',
-                              color: '#bdc3c7',
-                              border: 'none',
-                              padding: '8px 12px',
-                              borderRadius: '6px',
-                              cursor: 'not-allowed',
-                              fontSize: '0.9em'
-                            }}>
-                              Active
-                            </button>
-                          )}
-                        </td>
+                        <td>{p.note || '-'}</td>
                       </tr>
                     );
                   })}

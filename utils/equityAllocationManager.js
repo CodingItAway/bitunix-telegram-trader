@@ -1,7 +1,8 @@
 // utils/equityAllocationManager.js - HEAVY DEBUG VERSION
 
 const { loadHistory, saveHistory } = require('../storage/googleDriveStorage');
-const { getCurrentEquity } = require('./getAccountBalance');
+const { getCurrentEquity, getAvailableBalance } = require('./getAccountBalance');
+const { getCurrentMarginUsed } = require('./getAccountBalance'); // Add this line if missing
 
 const REALIZED_DRAWDOWN_THRESHOLD = 0.05; // 5%
 
@@ -84,6 +85,7 @@ async function getRiskReference() {
 
   try {
     await refreshCache();
+    
   } catch (err) {
     console.error('[EQUITY MANAGER] refreshCache failed in getRiskReference:', err.message);
     return 0; // Fail safe — but loud in logs
@@ -107,7 +109,7 @@ async function getRiskReference() {
 async function getCapitalStatus() {
   console.log('[EQUITY MANAGER] getCapitalStatus() called');
   await refreshCache();
-
+  const availableBalance = await getAvailableBalance();
   if (!cache) {
     console.error('[EQUITY MANAGER] Cache null in getCapitalStatus');
     return {};
@@ -130,7 +132,8 @@ async function getCapitalStatus() {
     realizedDrawdownPercent: (realizedDD * 100).toFixed(2),
     riskReference: await getRiskReference(),
     riskMode: cache.riskBaseMode || 'aggressive',
-    showAcceptDrawdownButton: showAcceptButton && !!cache.featureEnabledAt
+    showAcceptDrawdownButton: showAcceptButton && !!cache.featureEnabledAt,
+    availableBalance: availableBalance
   };
 }
 
