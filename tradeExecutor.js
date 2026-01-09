@@ -121,7 +121,7 @@ console.log(`[DYNAMIC LEVERAGE] Avg entry: ${plannedAvgEntry.toFixed(6)} | SL di
       console.log(`Dynamic sizing failed — skipping: ${e.message}`);
       await logSignal(signal, 'failed', { 
   reason: 'dynamic_sizing_failed',
-  note: sizingResult ? `notional $${sizingResult.notional || 'N/A'}` : 'no_sizing_result'
+  note: 'Sizing returned null or threw error'
 });
       return;
     }
