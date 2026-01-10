@@ -10,7 +10,7 @@ async function initAudit() {
     const loaded = await loadAudit();
     audit = loaded || { signals: [], failures: [] };
     pruneOldEntries();
-    console.log(`[AUDIT] Loaded ${audit.signals.length} signals and ${audit.failures.length} failures from Drive`);
+    console.log(`[AUDIT] Loaded ${audit.signals.length} signals and ${audit.failures.length} failures from DB`);
   } catch (e) {
     console.warn('[AUDIT] Failed to load audit — starting fresh:', e.message);
     audit = { signals: [], failures: [] };

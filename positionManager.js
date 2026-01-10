@@ -215,7 +215,7 @@ master.pendingEntryCount = currentPendingCount;
 
     if (hasChanges) {
       await savePositions(tracked);
-      console.log(`[MANAGER] Changes detected — saved updated positions to Drive`);
+      console.log(`[MANAGER] Changes detected — saved updated positions to DB`);
     } else {
       console.log(`[MANAGER] No changes — nothing saved`);
     }

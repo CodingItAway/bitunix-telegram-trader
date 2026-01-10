@@ -6,6 +6,7 @@ const { loadPositions, savePositions } = require('./storage/mongoStorage');
 const { calculatePositionSize } = require('./positionSizer');
 const { logSignal } = require('./utils/signalAuditor');
 const { google } = require('googleapis'); // Add this if not already there
+const { getCurrentRiskLevel } = require('./utils/getRiskFromScraper');
 // === CONFIG ===
 const USE_POST_ONLY = process.env.USE_POST_ONLY !== 'false';
 const LATE_MARKET_PERCENT = parseFloat(process.env.LATE_MARKET_PERCENT || '35') / 100;
@@ -30,55 +31,14 @@ async function executeTrade(signal) {
   try {
     const { symbol, direction, entries, targets, sl } = signal;
 
-// === FETCH LIVE RISK FROM MRD_ACTIVE_SIGNALS.JSON (READ-ONLY MIRROR) ===
+// === FETCH LIVE RISK FROM MRD_ACTIVE_SIGNALS DB ===
 let actualRiskLevel = 'medium'; // safe fallback
 
 try {
-  if (!process.env.GOOGLE_CREDENTIALS_BASE64) {
-    console.warn('[LIVE RISK MIRROR] GOOGLE_CREDENTIALS_BASE64 not set — defaulting to medium');
-  } else if (!process.env.MRD_ACTIVE_SIGNALS_FOLDER_ID) {
-    console.warn('[LIVE RISK MIRROR] MRD_ACTIVE_SIGNALS_FOLDER_ID not set — defaulting to medium');
-  } else {
-    // Direct authentication — same pattern as mongoStorage.js
-    const jsonString = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf-8');
-    const credentials = JSON.parse(jsonString);
-
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ['https://www.googleapis.com/auth/drive']
-    });
-
-    const drive = google.drive({ version: 'v3', auth });
-
-    const res = await drive.files.list({
-      q: `name='mrd_active_signals.json' and '${process.env.MRD_ACTIVE_SIGNALS_FOLDER_ID}' in parents and mimeType='application/json' and trashed=false`,
-      fields: 'files(id)',
-      spaces: 'drive'
-    });
-
-    if (res.data.files.length === 0) {
-      console.log('[LIVE RISK MIRROR] mrd_active_signals.json not found in folder — defaulting to medium');
-    } else {
-      const fileId = res.data.files[0].id;
-      const content = await drive.files.get({ fileId, alt: 'media' });
-
-      let rawData = content.data;
-      if (Buffer.isBuffer(rawData)) rawData = rawData.toString('utf-8');
-      else if (typeof rawData === 'object') rawData = JSON.stringify(rawData);
-
-      const data = JSON.parse(rawData);
-      const activeSignal = data.signals.find(s => s.symbol === symbol);
-
-      if (activeSignal?.risk) {
-        actualRiskLevel = activeSignal.risk.toLowerCase() === 'low' ? 'low' : 'medium';
-        console.log(`[LIVE RISK MIRROR] ${symbol}: "${activeSignal.risk}" → using "${actualRiskLevel}" risk`);
-      } else {
-        console.log(`[LIVE RISK MIRROR] No risk field for ${symbol} — defaulting to medium`);
-      }
-    }
-  }
-} catch (e) {
-  console.warn(`[LIVE RISK MIRROR] Error fetching risk for ${symbol}: ${e.message} — using medium`);
+  actualRiskLevel = await getCurrentRiskLevel(symbol);
+  console.log(`[RISK FETCH] Retrieved risk level for ${symbol}: ${actualRiskLevel}`);
+} catch (err) {
+  console.warn(`[RISK FETCH] Unexpected error for ${symbol}: ${err.message} — staying at medium`);
 }
 
     if (!symbol || !direction || entries.length === 0 || !sl) {
