@@ -5,7 +5,6 @@ const BitunixClient = require('./utils/openNewPositions');
 const { loadPositions, savePositions } = require('./storage/mongoStorage');
 const { calculatePositionSize } = require('./positionSizer');
 const { logSignal } = require('./utils/signalAuditor');
-const { google } = require('googleapis'); // Add this if not already there
 const { getCurrentRiskLevel } = require('./utils/getRiskFromScraper');
 // === CONFIG ===
 const USE_POST_ONLY = process.env.USE_POST_ONLY !== 'false';
