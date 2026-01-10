@@ -57,7 +57,4 @@ async function logSignal(signal, outcome, details = {}) {
   await saveAudit(audit);
 }
 
-// Load on startup
-initAudit();
-
-module.exports = { logSignal };
+module.exports = { logSignal, initAudit };

@@ -350,6 +350,11 @@ async function refreshSymbols() {
       console.error('[SERVER] Failed to start tpSlMonitor:', err);
     }); */
 
+    // After Mongo connected successfully
+    const { initAudit } = require('./utils/signalAuditor');
+    await initAudit();
+    console.log('[SERVER] Audit initialized after Mongo connection');
+
     // 2. Safe to start DB-dependent initial operations
     console.log('Performing initial positions broadcast...');
     await broadcastPositions();
