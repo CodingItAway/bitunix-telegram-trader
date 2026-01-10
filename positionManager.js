@@ -3,10 +3,8 @@
 const BitunixClient = require('./utils/openNewPositions');
 const { getPendingOrders } = require('./utils/getPendingOrders');
 const { getOpenPositions } = require('./utils/getOpenPositions');
-const { placeNextTpLevel } = require('./utils/tpslManager');
 const { loadPositions, savePositions } = require('./storage/mongoStorage');
 const { updateHistory } = require('./utils/historyManager');
-const { isTpSlDisabled } = require('./utils/tpSlControl');
 require('dotenv').config();
 
 const client = new BitunixClient(process.env.BITUNIX_API_KEY, process.env.BITUNIX_API_SECRET);
@@ -164,43 +162,6 @@ console.log(`🧹 [CLEANUP] No stale entry orders to cancel`);
       hasChanges = true;
     }
 
-// === BOMB MODE: RE-PLACE ALL TP LEVELS EVERY CYCLE ===
-if (!isTpSlDisabled()) {
-if (master.status === 'open' && master.originalTargets) {
-for (let tpIndex = 0; tpIndex < master.originalTargets.length; tpIndex++) {
-  const tpPrice = master.originalTargets[tpIndex];
-  const allocation = TP_ALLOCATION_PERCENT[tpIndex];
-  const qtyRaw = master.currentQty * allocation / 100;
-  const qty = qtyRaw.toFixed(6).replace(/\.?0+$/, '');
-
-  if (parseFloat(qty) <= 0) continue;
-
-  const tpslParams = {
-    symbol: master.symbol,
-    side: master.direction === 'BUY' ? 'SELL' : 'BUY',
-    qty: qty,
-    tpPrice: tpPrice.toString(),
-    tpTriggerType: 'MARK',
-    tpOrderType: 'LIMIT',
-    tpLimitPrice: master.direction === 'BUY'
-      ? (tpPrice * 1.001).toString()
-      : (tpPrice * 0.999).toString(),
-    reduceOnly: true,
-    marginCoin: 'USDT',
-    positionMode: 'HEDGE',
-    marginMode: 'ISOLATION',
-    clientOrderId: `bomb_tp_${master.symbol}_${tpIndex}_${Date.now()}`
-  };
-
-  try {
-    console.log(`[BOMB TP] Attempting TP${tpIndex + 1} @ ${tpPrice} | Qty: ${qty} | ${master.symbol}`);
-    const success = await placeNextTpLevel(master, apiPos);
-  } catch (e) {
-    console.warn(`[BOMB TP] Failed (expected on duplicates): ${e.message}`);
-  }
-}
-}
-}
     // === DETECT DCA FILL VIA PENDING ENTRY COUNT DROP ===
 const currentPendingCount = pendingEntries.length;
 const previousPendingCount = master.pendingEntryCount ?? currentPendingCount;
@@ -230,56 +191,6 @@ console.log(`🔄 [LADDER REBUILD] Refreshing full TP ladder + SL for new total 
 }
 
 master.pendingEntryCount = currentPendingCount;
-
-    // === PLACE STOP LOSS (self-contained) ===
-    if (!isTpSlDisabled()) {
-    if (!master.slPlaced && master.currentQty > 0 && positionId) {
-      console.log(`[MANAGER] Placing Stop Loss @ ${master.sl} for ${master.currentQty} contracts`);
-
-      const fetch = require('node-fetch');
-      const CryptoJS = require('crypto-js');
-
-      const slParams = {
-        symbol: master.symbol,
-        positionId: positionId.toString(),
-        slPrice: master.sl.toString(),
-        slStopType: 'MARK_PRICE',
-        slOrderType: 'MARKET',
-        slQty: master.currentQty.toFixed(6).replace(/\.?0+$/, '')
-      };
-
-      const timestamp = Date.now().toString();
-      const nonce = CryptoJS.lib.WordArray.random(16).toString();
-      const bodyStr = JSON.stringify(slParams);
-      const digestInput = nonce + timestamp + process.env.BITUNIX_API_KEY + '' + bodyStr;
-      const digest = CryptoJS.SHA256(digestInput).toString();
-      const sign = CryptoJS.SHA256(digest + process.env.BITUNIX_API_SECRET).toString();
-
-      try {
-        const response = await fetch('https://fapi.bitunix.com/api/v1/futures/tpsl/place_order', {
-          method: 'POST',
-          headers: {
-            'api-key': process.env.BITUNIX_API_KEY,
-            'nonce': nonce,
-            'timestamp': timestamp,
-            'sign': sign,
-            'Content-Type': 'application/json',
-            'language': 'en-US'
-          },
-          body: bodyStr
-        });
-
-        const data = await response.json();
-        if (data.code !== 0) throw new Error(data.msg || 'SL failed');
-
-        console.log(`🛡️ [MANAGER] Stop Loss successfully placed @ ${master.sl}`);
-        master.slPlaced = true;
-        hasChanges = true;
-      } catch (e) {
-        console.error(`❌ [MANAGER] SL placement failed: ${e.message}`);
-      }
-    }
-  }
 
   } catch (assetError) {
     console.error(`[MANAGER] Error processing ${master.symbol} ${master.direction} — skipping to next asset:`, assetError.message);

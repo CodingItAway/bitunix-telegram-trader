@@ -256,7 +256,6 @@
     function App() {
       const [positions, setPositions] = useState([]);
       const [status, setStatus] = useState('Connecting...');
-      const [tpSlDisabled, setTpSlDisabled] = useState(true);
       const [capitalStatus, setCapitalStatus] = useState(null);
       const [currentPage, setCurrentPage] = useState(1);
       const positionsPerPage = 10;
@@ -277,7 +276,6 @@
         });
 
         fetchPositions();
-        fetchTpSlStatus();
         fetchCapitalStatus();
 
         const interval = setInterval(() => {
@@ -304,15 +302,7 @@
         }
       };
 
-      const fetchTpSlStatus = async () => {
-        try {
-          const res = await fetch('/tp-sl-status');
-          const data = await res.json();
-          setTpSlDisabled(data.disabled);
-        } catch (e) {
-          console.error(e);
-        }
-      };
+    
 
       const fetchCapitalStatus = async () => {
         try {
@@ -333,16 +323,6 @@
         } catch (e) {
           console.error('Failed to fetch capital status:', e);
         }
-      };
-
-      const toggleTpSl = async () => {
-        const newState = !tpSlDisabled;
-        await fetch('/toggle-tp-sl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ disabled: newState })
-        });
-        setTpSlDisabled(newState);
       };
 
       const acceptDrawdown = async () => {
@@ -431,16 +411,6 @@
               )}
             </div>
           )}
-
-          {/* TP/SL Toggle */}
-          <div className="toggle-section">
-            <label>Take Profit & Stop Loss Management</label>
-            <div className="button-group">
-              <button className={tpSlDisabled ? 'disabled' : 'enabled'} onClick={toggleTpSl}>
-                {tpSlDisabled ? 'DISABLED' : 'ENABLED'}
-              </button>
-            </div>
-          </div>
 
           {/* Total Running Trades counter */}
           <div style={{

@@ -80,22 +80,6 @@ app.get('/symbols', (req, res) => {
   });
 });
 
-// NEW: In-memory toggle
-app.post('/toggle-tp-sl', (req, res) => {
-  const { disabled } = req.body;
-  const { setTpSlDisabled } = require('./utils/tpSlControl');
-  setTpSlDisabled(disabled);
-  res.json({ 
-    success: true, 
-    disabled: require('./utils/tpSlControl').isTpSlDisabled()
-  });
-});
-
-app.get('/tp-sl-status', (req, res) => {
-  const { isTpSlDisabled } = require('./utils/tpSlControl');
-  res.json({ disabled: isTpSlDisabled() });
-});
-
 // Serve history data for chart & table
 app.get('/history-data', async (req, res) => {
   try {
@@ -359,6 +343,12 @@ async function refreshSymbols() {
     console.log('Connecting to MongoDB...');
     await connectToDatabase();
     console.log('MongoDB connected ✓');
+
+    // Start real-time TP/SL monitoring via WebSocket
+    /* const { startMonitor } = require('./utils/tpSlMonitor');
+    startMonitor().catch(err => {
+      console.error('[SERVER] Failed to start tpSlMonitor:', err);
+    }); */
 
     // 2. Safe to start DB-dependent initial operations
     console.log('Performing initial positions broadcast...');

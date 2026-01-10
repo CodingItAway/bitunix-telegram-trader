@@ -20,7 +20,8 @@
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
     "socket.io": "^4.7.2",
-    "telegram": "^2.26.22"
+    "telegram": "^2.26.22",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
