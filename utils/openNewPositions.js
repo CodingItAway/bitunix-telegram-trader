@@ -139,6 +139,8 @@ class BitunixClient {
   return this.signedRequest('POST', '/api/v1/futures/account/change_leverage', {}, body);
 }
 
+
+
   async placeOrder(orderParams) {
     const body = {
       reduceOnly: false,
@@ -147,6 +149,10 @@ class BitunixClient {
       ...orderParams
     };
     return this.signedRequest('POST', '/api/v1/futures/trade/place_order', {}, body);
+  }
+
+  async getAccountOverview() {
+    return this.signedRequest('GET', '/api/v1/futures/account', { marginCoin: 'USDT' });
   }
 
 }
