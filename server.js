@@ -1,4 +1,4 @@
-// server.js - Final, robust version
+// server.js - Final, robust version with MongoDB startup race condition fix
 
 require('dotenv').config();
 const express = require('express');
@@ -143,10 +143,7 @@ app.get('/audit', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'audit.html'));
 });
 
-
-
 // In server.js (replace your current /api/mrd-signal)
-
 app.post('/api/mrd-signal', express.text({ type: '*/*' }), async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'string') {
@@ -191,8 +188,6 @@ STOP LOSS: $${sl}`;
   }
 });
 
-
-// API: Delete a position by index (for dashboard manual cleanup)
 // API: Delete a position by index (for dashboard manual cleanup) - FINAL WORKING
 app.post('/delete-position', async (req, res) => {
   try {
@@ -236,7 +231,6 @@ app.post('/delete-position', async (req, res) => {
   }
 });
 
-
 // Add this endpoint for dashboard control
 app.post('/close-all', async (req, res) => {
   try {
@@ -276,7 +270,6 @@ app.post('/api/bulk-close', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // In server.js — add this route
 app.get('/api/live-equity', async (req, res) => {
@@ -334,11 +327,6 @@ async function broadcastPositions() {
   }
 }
 
-// Broadcast every 10 seconds
-setInterval(broadcastPositions, 10000);
-// Initial broadcast
-broadcastPositions();
-
 // Refresh symbols
 async function refreshSymbols() {
   try {
@@ -360,27 +348,41 @@ async function refreshSymbols() {
   }
 }
 
-// Initial refresh
-refreshSymbols();
-
-// Auto-enable history tracking on every bot start
+// ─────────────────────────────────────────────────────────────
+// PROPER SEQUENTIAL STARTUP – fixes MongoDB race conditions
+// ─────────────────────────────────────────────────────────────
 (async () => {
   try {
+    console.log('Starting server initialization...');
+
+    // 1. Ensure MongoDB is connected before anything DB-related
+    console.log('Connecting to MongoDB...');
     await connectToDatabase();
-    console.log('MongoDB connection ready → starting server...');
+    console.log('MongoDB connected ✓');
+
+    // 2. Safe to start DB-dependent initial operations
+    console.log('Performing initial positions broadcast...');
+    await broadcastPositions();
+
+    // 3. Start periodic tasks only after connection is ready
+    setInterval(broadcastPositions, 10000);
+    setInterval(refreshSymbols, 24 * 60 * 60 * 1000);
+
+    // 4. Initial symbol refresh (can run in parallel, but after DB)
+    refreshSymbols();
+
+    // 5. Finally start accepting HTTP/WebSocket connections
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`   Health: http://localhost:${PORT}/health`);
+      console.log(`   Dashboard: http://localhost:${PORT}`);
+      console.log(`   Symbols: http://localhost:${PORT}/symbols`);
+    });
+
   } catch (err) {
-    console.error('[STARTUP] Failed to auto-enable history tracking:', err.message);
+    console.error('Server startup failed:', err.message);
+    console.error(err.stack);
+    process.exit(1);
   }
 })();
-
-// Daily refresh
-setInterval(refreshSymbols, 24 * 60 * 60 * 1000);
-
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   Dashboard: http://localhost:${PORT}`);
-  console.log(`   Symbols: http://localhost:${PORT}/symbols`);
-});
