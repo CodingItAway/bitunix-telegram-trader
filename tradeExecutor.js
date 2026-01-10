@@ -2,7 +2,7 @@
 
 const fetch = require('node-fetch');
 const BitunixClient = require('./utils/openNewPositions');
-const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
+const { loadPositions, savePositions } = require('./storage/mongoStorage');
 const { calculatePositionSize } = require('./positionSizer');
 const { logSignal } = require('./utils/signalAuditor');
 const { google } = require('googleapis'); // Add this if not already there
@@ -39,7 +39,7 @@ try {
   } else if (!process.env.MRD_ACTIVE_SIGNALS_FOLDER_ID) {
     console.warn('[LIVE RISK MIRROR] MRD_ACTIVE_SIGNALS_FOLDER_ID not set — defaulting to medium');
   } else {
-    // Direct authentication — same pattern as googleDriveStorage.js
+    // Direct authentication — same pattern as mongoStorage.js
     const jsonString = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf-8');
     const credentials = JSON.parse(jsonString);
 

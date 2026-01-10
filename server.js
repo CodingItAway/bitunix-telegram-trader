@@ -6,7 +6,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const axios = require('axios');
 const path = require('path');
-const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
+const { loadPositions, savePositions } = require('./storage/mongoStorage');
 const { getEquityCurve } = require('./utils/historyManager');
 require('./positionManager'); // Auto-starts manager with setInterval
 const { parseMrdSignal } = require('./utils/mrdParser');
@@ -17,6 +17,8 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const { getCapitalStatus, acceptRealizedDrawdown, forceAggressiveMode } = require('./utils/equityAllocationManager');
+const { connectToDatabase } = require('./db/mongoConnection');
+
 
 const BASE_URL = 'https://fapi.bitunix.com';
 
@@ -126,7 +128,7 @@ app.get('/history-data', async (req, res) => {
   }
 });
 
-const { loadAudit } = require('./storage/signalAuditStorage');
+const { loadAudit } = require('./storage/mongoStorage');
 
 app.get('/audit-data', async (req, res) => {
   try {
@@ -364,8 +366,8 @@ refreshSymbols();
 // Auto-enable history tracking on every bot start
 (async () => {
   try {
-    await enableHistoryTracking();
-    console.log('[STARTUP] History tracking automatically enabled');
+    await connectToDatabase();
+    console.log('MongoDB connection ready → starting server...');
   } catch (err) {
     console.error('[STARTUP] Failed to auto-enable history tracking:', err.message);
   }

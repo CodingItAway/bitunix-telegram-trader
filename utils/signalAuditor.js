@@ -1,6 +1,6 @@
 // utils/signalAuditor.js - Persistent 30-day audit with append + prune
 
-const { loadAudit, saveAudit } = require('../storage/signalAuditStorage');
+const { loadAudit, saveAudit } = require('../storage/mongoStorage');
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 let audit = { signals: [], failures: [] }; // Full persistent audit

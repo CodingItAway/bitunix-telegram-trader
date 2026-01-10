@@ -4,7 +4,7 @@ const BitunixClient = require('./utils/openNewPositions');
 const { getPendingOrders } = require('./utils/getPendingOrders');
 const { getOpenPositions } = require('./utils/getOpenPositions');
 const { placeNextTpLevel } = require('./utils/tpslManager');
-const { loadPositions, savePositions } = require('./storage/googleDriveStorage');
+const { loadPositions, savePositions } = require('./storage/mongoStorage');
 const { updateHistory } = require('./utils/historyManager');
 const { isTpSlDisabled } = require('./utils/tpSlControl');
 require('dotenv').config();
@@ -109,7 +109,7 @@ async function managePositions() {
 
     if (isTrulyClosed) {
 
-      const { loadHistory, saveHistory } = require('./storage/googleDriveStorage');
+      const { loadHistory, saveHistory } = require('./storage/mongoStorage');
       const history = await loadHistory();
 
       if (positionId) {

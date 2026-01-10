@@ -2,7 +2,7 @@
 const axios = require('axios'); // already required in server.js, but safe to add
 const { getCurrentEquity } = require('./utils/getAccountBalance');
 const { logSignal } = require('./utils/signalAuditor');
-const { loadPositions } = require('./storage/googleDriveStorage');
+const { loadPositions } = require('./storage/mongoStorage');
 const CryptoJS = require('crypto-js');
 const { getRiskReference } = require('./utils/equityAllocationManager');
 const API_BASE = 'https://fapi.bitunix.com';

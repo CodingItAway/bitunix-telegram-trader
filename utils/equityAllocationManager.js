@@ -1,6 +1,6 @@
 // utils/equityAllocationManager.js - HEAVY DEBUG VERSION
 
-const { loadHistory, saveHistory } = require('../storage/googleDriveStorage');
+const { loadHistory, saveHistory } = require('../storage/mongoStorage');
 const { getCurrentEquity, getAvailableBalance } = require('./getAccountBalance');
 const { getCurrentMarginUsed } = require('./getAccountBalance'); // Add this line if missing
 

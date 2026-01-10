@@ -5,7 +5,7 @@ const fetch = require('node-fetch');
 const CryptoJS = require('crypto-js');
 
 const { getCurrentEquity } = require('./getAccountBalance');
-const { loadHistory, saveHistory } = require('../storage/googleDriveStorage');
+const { loadHistory, saveHistory } = require('../storage/mongoStorage');
 
 const API_BASE = 'https://fapi.bitunix.com';
 

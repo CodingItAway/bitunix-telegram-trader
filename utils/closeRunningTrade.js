@@ -3,7 +3,7 @@
 require('dotenv').config();
 const fetch = require('node-fetch');
 const crypto = require('node:crypto');
-const { loadPositions } = require('../storage/googleDriveStorage');
+const { loadPositions } = require('../storage/mongoStorage');
 
 const API_BASE = 'https://fapi.bitunix.com';
 const API_KEY = process.env.BITUNIX_API_KEY;
