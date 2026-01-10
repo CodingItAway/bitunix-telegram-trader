@@ -373,7 +373,7 @@
         <div className="container">
           <h1>🚀 Bitunix Trading Bot Dashboard</h1>
 
-          {/* Navigation Links - No redundant Dashboard button */}
+          {/* Navigation Links */}
           <div className="nav-bar">
             <a href="/history.html">History & Equity Curve</a>
             <a href="/audit.html">Signal Audit Log</a>
@@ -440,6 +440,17 @@
                 {tpSlDisabled ? 'DISABLED' : 'ENABLED'}
               </button>
             </div>
+          </div>
+
+          {/* Total Running Trades counter */}
+          <div style={{
+            textAlign: 'left',
+            margin: '40px 0 20px',
+            fontSize: '1.4em',
+            fontWeight: 'bold',
+            color: '#4a5568'
+          }}>
+            Total Running Trades: {positions.length}
           </div>
 
           {/* Positions Table with Pagination */}

@@ -333,7 +333,7 @@ async function broadcastPositions() {
 }
 
 // Broadcast every 10 seconds
-setInterval(broadcastPositions, 1000);
+setInterval(broadcastPositions, 10000);
 // Initial broadcast
 broadcastPositions();
 
